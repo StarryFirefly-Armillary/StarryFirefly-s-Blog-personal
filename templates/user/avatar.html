@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}修改头像 - 繁星绘流萤{% endblock %}
+{% block content %}
+<div class="admin-container" style="text-align:center;">
+    <h2>修改头像</h2>
+
+    <div class="avatar-preview-large">
+        {% if user.avatar %}
+            <img src="{{ user.avatar }}" alt="当前头像" id="avatar-preview">
+        {% else %}
+            <div class="avatar-placeholder">{{ session.username[0] | upper }}</div>
+        {% endif %}
+    </div>
+
+    <form method="POST" enctype="multipart/form-data" class="admin-form" style="margin-top:20px;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>选择新头像</label>
+        <div class="file-input-wrap">
+            <input type="file" name="avatar" id="avatar-input" accept="image/*" onchange="previewAvatar(this);updateFileName(this)">
+            <label for="avatar-input" class="file-input-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                选择图片
+            </label>
+            <span class="file-input-name" id="avatar-input-name">未选择文件</span>
+        </div>
+        <p class="upload-status">支持 png / jpg / jpeg / gif / webp / bmp</p>
+        <button type="submit" class="btn">上传头像</button>
+    </form>
+
+    <p class="back-link"><a href="{{ url_for('index') }}">← 返回首页</a></p>
+</div>
+
+<script>
+function previewAvatar(input) {
+    var file = input.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        var preview = document.getElementById('avatar-preview');
+        if (preview && preview.tagName === 'IMG') {
+            preview.src = e.target.result;
+        } else {
+            var img = document.createElement('img');
+            img.src = e.target.result;
+            img.alt = '头像预览';
+            img.id = 'avatar-preview';
+            var container = document.querySelector('.avatar-preview-large');
+            container.innerHTML = '';
+            container.appendChild(img);
+        }
+    };
+    reader.readAsDataURL(file);
+}
+</script>
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}个人简介 - 繁星绘流萤{% endblock %}
+{% block content %}
+<div class="admin-header">
+    <h2>个人简介</h2>
+    <div class="admin-actions">
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">← 返回后台</a>
+    </div>
+</div>
+
+<form method="POST" class="admin-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>标题</label>
+    <input type="text" name="title" class="input" value="{{ title }}" placeholder="如: 关于我" maxlength="50">
+
+    <label>内容</label>
+    <textarea name="content" class="input" rows="8" placeholder="介绍一下你自己..." maxlength="1000" style="resize:vertical;">{{ content }}</textarea>
+    <p style="color:var(--text-secondary);font-size:0.8rem;margin-bottom:12px;">支持换行，最多1000字。</p>
+
+    <hr style="border:0;border-top:1px solid var(--border);margin:24px 0;">
+
+    <h3 style="margin-bottom:4px;">首页设置</h3>
+    <p style="color:var(--text-secondary);font-size:0.82rem;margin-bottom:16px;">修改首页显示的主标题和副标题。</p>
+
+    <label>主标题</label>
+    <input type="text" name="site_title" class="input" value="{{ site_title }}" placeholder="如: 繁星绘流萤的博客" maxlength="50">
+
+    <label>副标题</label>
+    <input type="text" name="site_subtitle" class="input" value="{{ site_subtitle }}" placeholder="如: 记录思考，分享生活" maxlength="100">
+
+    <button type="submit" class="btn">保存</button>
+</form>
+{% endblock %}

@@ -1,0 +1,1027 @@
+{% extends "base.html" %}
+{% block title %}{% if article %}编辑文章{% else %}新建文章{% endif %}{% endblock %}
+{% block content %}
+<div class="admin-container" style="max-width: 900px;">
+    <h2>{% if article %}编辑文章{% else %}新建文章{% endif %}</h2>
+    <form method="POST" id="article-form" class="admin-form" onsubmit="return prepareSubmit();">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+            <div style="width:160px;">
+                <label>文章ID {% if article %}(当前: {{ article.id }}){% endif %}</label>
+                <input type="number" name="article_id" class="input" value="{{ article.id if article else '' }}" min="1" placeholder="留空自动分配">
+            </div>
+            <p style="margin-bottom:12px;color:var(--text-secondary);font-size:0.78rem;">新建时留空自动填补最小空缺ID</p>
+        </div>
+
+        <label>标题</label>
+        <input type="text" name="title" class="input" value="{{ article.title if article else '' }}" required autofocus>
+
+        <label>摘要</label>
+        <input type="text" name="summary" class="input" value="{{ article.summary if article else '' }}" maxlength="200">
+
+        <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+            <div style="flex:1;min-width:200px;">
+                <label>发布时间</label>
+                <input type="datetime-local" name="created_at" class="input" value="{% if article and article.created_at %}{{ article.created_at[:16].replace(' ', 'T') }}{% endif %}" step="1">
+            </div>
+            <p style="margin-bottom:12px;color:var(--text-secondary);font-size:0.78rem;">留空则自动设为当前时间</p>
+        </div>
+
+        <label>内容</label>
+
+        <div class="upload-area">
+            <div class="upload-row">
+                <div class="file-input-wrap" style="flex:1;min-width:0;">
+                    <input type="file" id="image-file" accept="image/*" onchange="updateFileName(this)">
+                    <label for="image-file" class="file-input-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        选择图片
+                    </label>
+                    <span class="file-input-name" id="image-file-name">未选择文件</span>
+                </div>
+                <button type="button" id="upload-btn" class="btn btn-secondary" style="white-space:nowrap;">上传图片</button>
+            </div>
+            <div class="upload-row" style="margin-top:8px;">
+                <input type="text" id="image-url" class="input" placeholder="或直接粘贴图片 URL..." style="margin-bottom:0;">
+                <button type="button" id="insert-url-btn" class="btn btn-secondary" style="white-space:nowrap;">插入图片</button>
+            </div>
+            <div class="upload-row" style="margin-top:8px;">
+                <div class="file-input-wrap" style="flex:1;min-width:0;">
+                    <input type="file" id="video-file" accept="video/*" onchange="updateFileName(this)">
+                    <label for="video-file" class="file-input-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        选择视频
+                    </label>
+                    <span class="file-input-name" id="video-file-name">未选择文件</span>
+                </div>
+                <button type="button" id="video-upload-btn" class="btn btn-secondary" style="white-space:nowrap;">上传视频</button>
+            </div>
+            <div class="upload-row" style="margin-top:8px;gap:8px;">
+                <button type="button" id="media-btn" class="btn btn-secondary" style="white-space:nowrap;">📷 媒体库</button>
+                <button type="button" id="attach-lib-btn" class="btn btn-secondary" style="white-space:nowrap;">📎 附件库</button>
+            </div>
+            <div class="upload-row" style="margin-top:8px;">
+                <div class="file-input-wrap" style="flex:1;min-width:0;">
+                    <input type="file" id="attach-file" onchange="updateFileName(this)">
+                    <label for="attach-file" class="file-input-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                        选择附件
+                    </label>
+                    <span class="file-input-name" id="attach-file-name">未选择文件</span>
+                </div>
+                <button type="button" id="attach-upload-btn" class="btn btn-secondary" style="white-space:nowrap;">上传附件</button>
+            </div>
+            <p id="upload-status" class="upload-status"></p>
+        </div>
+
+        <div id="media-modal" class="media-modal" style="display:none;">
+            <div class="media-modal-bg" onclick="document.getElementById('media-modal').style.display='none'"></div>
+            <div class="media-modal-body">
+                <div class="media-modal-header">
+                    <h4 id="media-modal-title">媒体库</h4>
+                    <button type="button" class="media-close" onclick="document.getElementById('media-modal').style.display='none'">&times;</button>
+                </div>
+                <div id="media-grid" class="media-grid">加载中...</div>
+            </div>
+        </div>
+
+        <div id="editor-container" class="quill-editor"></div>
+        <textarea name="content" id="content-hidden" style="display:none;">{{ article.content if article else '' }}</textarea>
+
+        <button type="submit" class="btn" style="margin-top:16px;">{% if article %}保存修改{% else %}发布文章{% endif %}</button>
+    </form>
+    <p class="back-link"><a href="{{ url_for('admin_dashboard') }}">← 返回后台</a></p>
+</div>
+
+<link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+<style>
+/* Quill 工具栏汉化 */
+.ql-snow .ql-picker.ql-header .ql-picker-label::before{content:'正文'!important}
+.ql-snow .ql-picker.ql-header .ql-picker-item[data-value=""]::before{content:'正文'!important}
+.ql-snow .ql-picker.ql-header .ql-picker-item[data-value="1"]::before{content:'标题一'!important}
+.ql-snow .ql-picker.ql-header .ql-picker-item[data-value="2"]::before{content:'标题二'!important}
+.ql-snow .ql-picker.ql-header .ql-picker-item[data-value="3"]::before{content:'标题三'!important}
+
+/* 字体汉化 + CSS 字体定义 */
+.ql-snow .ql-picker.ql-font .ql-picker-label::before{content:'默认字体'!important}
+.ql-snow .ql-picker.ql-font .ql-picker-label[data-value='yahei']::before{content:'微软雅黑'!important}
+.ql-snow .ql-picker.ql-font .ql-picker-label[data-value='songti']::before{content:'宋体'!important}
+.ql-snow .ql-picker.ql-font .ql-picker-label[data-value='kaiti']::before{content:'楷体'!important}
+.ql-snow .ql-picker.ql-font .ql-picker-label[data-value='fangsong']::before{content:'仿宋'!important}
+.ql-snow .ql-picker.ql-font .ql-picker-label[data-value='arial']::before{content:'Arial'!important}
+.ql-snow .ql-picker.ql-font .ql-picker-label[data-value='serif']::before{content:'衬线体'!important}
+.ql-snow .ql-picker.ql-font .ql-picker-label[data-value='monospace']::before{content:'等宽体'!important}
+.ql-snow .ql-picker.ql-font .ql-picker-item[data-value=""]::before{content:'默认字体'!important}
+.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="yahei"]::before{content:'微软雅黑'!important}
+.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="songti"]::before{content:'宋体'!important}
+.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="kaiti"]::before{content:'楷体'!important}
+.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="fangsong"]::before{content:'仿宋'!important}
+.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="arial"]::before{content:'Arial'!important}
+.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="serif"]::before{content:'衬线体'!important}
+.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="monospace"]::before{content:'等宽体'!important}
+
+.ql-font-yahei  { font-family: 'Microsoft YaHei','微软雅黑',sans-serif !important; }
+.ql-font-songti { font-family: 'SimSun','宋体',serif !important; }
+.ql-font-kaiti  { font-family: 'KaiTi','楷体',serif !important; }
+.ql-font-fangsong { font-family: 'FangSong','仿宋',serif !important; }
+.ql-font-arial  { font-family: Arial,Helvetica,sans-serif !important; }
+
+/* 字号汉化 */
+.ql-snow .ql-picker.ql-size .ql-picker-label::before{content:'16px'!important}
+.ql-snow .ql-picker.ql-size .ql-picker-label[data-value='12px']::before{content:'12px'!important}
+.ql-snow .ql-picker.ql-size .ql-picker-label[data-value='14px']::before{content:'14px'!important}
+.ql-snow .ql-picker.ql-size .ql-picker-label[data-value='16px']::before{content:'16px'!important}
+.ql-snow .ql-picker.ql-size .ql-picker-label[data-value='18px']::before{content:'18px'!important}
+.ql-snow .ql-picker.ql-size .ql-picker-label[data-value='20px']::before{content:'20px'!important}
+.ql-snow .ql-picker.ql-size .ql-picker-label[data-value='24px']::before{content:'24px'!important}
+.ql-snow .ql-picker.ql-size .ql-picker-label[data-value='28px']::before{content:'28px'!important}
+.ql-snow .ql-picker.ql-size .ql-picker-label[data-value='32px']::before{content:'32px'!important}
+.ql-snow .ql-picker.ql-size .ql-picker-label[data-value='40px']::before{content:'40px'!important}
+.ql-snow .ql-picker.ql-size .ql-picker-label[data-value='48px']::before{content:'48px'!important}
+.ql-snow .ql-picker.ql-size .ql-picker-item[data-value="12px"]::before{content:'12px (小)'!important}
+.ql-snow .ql-picker.ql-size .ql-picker-item[data-value="14px"]::before{content:'14px'!important}
+.ql-snow .ql-picker.ql-size .ql-picker-item[data-value="16px"]::before,.ql-snow .ql-picker.ql-size .ql-picker-item[data-value=""]::before{content:'16px (默认)'!important}
+.ql-snow .ql-picker.ql-size .ql-picker-item[data-value="18px"]::before{content:'18px'!important}
+.ql-snow .ql-picker.ql-size .ql-picker-item[data-value="20px"]::before{content:'20px'!important}
+.ql-snow .ql-picker.ql-size .ql-picker-item[data-value="24px"]::before{content:'24px'!important}
+.ql-snow .ql-picker.ql-size .ql-picker-item[data-value="28px"]::before{content:'28px'!important}
+.ql-snow .ql-picker.ql-size .ql-picker-item[data-value="32px"]::before{content:'32px'!important}
+.ql-snow .ql-picker.ql-size .ql-picker-item[data-value="40px"]::before{content:'40px'!important}
+.ql-snow .ql-picker.ql-size .ql-picker-item[data-value="48px"]::before{content:'48px (大)'!important}
+
+/* 颜色面板 — 扩展为多行网格 */
+.ql-snow .ql-picker.ql-color .ql-picker-options,
+.ql-snow .ql-picker.ql-background .ql-picker-options {
+    width: 208px !important;
+}
+.ql-snow .ql-picker.ql-color .ql-picker-item,
+.ql-snow .ql-picker.ql-background .ql-picker-item {
+    width: 20px !important;
+    height: 20px !important;
+    margin: 2px !important;
+    border: 1px solid #ddd !important;
+    border-radius: 2px !important;
+}
+.ql-snow .ql-picker.ql-color .ql-picker-item:hover,
+.ql-snow .ql-picker.ql-background .ql-picker-item:hover {
+    border-color: #3b82f6 !important;
+    transform: scale(1.3);
+    z-index: 1;
+}
+
+.ql-snow .ql-picker.ql-align .ql-picker-item::before{content:''!important}
+
+/* --- 自定义颜色按钮 --- */
+.ql-toolbar .ql-color-btn {
+    height: 24px; width: 34px; border: 1px solid transparent; border-radius: 3px;
+    background: transparent; cursor: pointer; display: inline-block;
+    padding: 0; margin: 0 1px; text-align: center; line-height: 24px;
+    vertical-align: top; position: relative;
+    font: inherit; color: inherit; outline: none;
+    -webkit-appearance: none; -moz-appearance: none;
+}
+.ql-toolbar .ql-color-btn:hover { background: #f0f0f0; border-color: #ccc; }
+.ql-toolbar .ql-color-btn svg { opacity: 0.6; width: 22px; height: 22px; vertical-align: middle; margin: -1px 0; }
+.ql-toolbar .ql-color-btn:hover svg { opacity: 0.8; }
+
+/* --- 内置调色盘 --- */
+.color-palette {
+    display: none; position: absolute; z-index: 1000;
+    background: #fff; border: 1px solid #ccc; border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15); padding: 10px;
+    width: 220px; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 4px;
+}
+.color-palette.show { display: block; }
+.color-palette .color-row { display: flex; gap: 4px; margin-bottom: 4px; justify-content: center; }
+.color-palette .color-swatch {
+    width: 22px; height: 22px; border-radius: 3px; border: 1px solid #ddd;
+    cursor: pointer; flex-shrink: 0; transition: transform 0.12s;
+}
+.color-palette .color-swatch:hover { transform: scale(1.25); border-color: #3b82f6; z-index: 1; }
+.color-palette .color-swatch.swatch-white { border-color: #ccc; }
+.color-palette .color-custom-btn {
+    display: block; width: 100%; margin-top: 6px; padding: 4px 0;
+    border: 1px dashed #ccc; border-radius: 4px; background: #fafafa;
+    cursor: pointer; font-size: 11px; color: #666; text-align: center;
+}
+.color-palette .color-custom-btn:hover { background: #f0f0f0; border-color: #999; }
+.color-palette input[type="color"] { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+
+/* 十六进制颜色输入 */
+.color-palette .color-hex-row { margin-bottom: 6px; margin-top: 2px; gap: 4px; }
+.color-hex-input {
+    width: 100%; flex: 1; height: 26px; border: 1px solid #ccc; border-radius: 4px;
+    font-size: 11px; font-family: monospace; padding: 0 6px; outline: none;
+    box-sizing: border-box; text-transform: uppercase;
+}
+.color-hex-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 1px rgba(59,130,246,0.2); }
+.color-hex-apply {
+    height: 26px; padding: 0 10px; border: 1px solid #3b82f6; border-radius: 4px;
+    background: #3b82f6; color: #fff; font-size: 11px; cursor: pointer;
+    white-space: nowrap; flex-shrink: 0;
+}
+.color-hex-apply:hover { background: #2563eb; border-color: #2563eb; }
+
+/* --- 自定义字号输入 --- */
+.ql-toolbar .ql-custom-size {
+    display: inline-block; height: 24px; line-height: 24px;
+    margin: 0 1px; white-space: nowrap;
+}
+.ql-toolbar .ql-custom-size input[type="number"] {
+    width: 44px; height: 24px; border: 1px solid #ccc; border-radius: 3px;
+    font-size: 11px; font-family: inherit; text-align: center; line-height: normal;
+    padding: 0 3px; outline: none; background: #fff; box-sizing: border-box;
+    vertical-align: top;
+}
+.ql-toolbar .ql-custom-size input[type="number"]:focus { border-color: #3b82f6; box-shadow: 0 0 0 1px rgba(59,130,246,0.2); }
+.ql-toolbar .ql-custom-size button {
+    height: 24px; width: 24px; border: 1px solid #ccc; border-radius: 3px;
+    background: #fff; cursor: pointer; display: inline-flex; align-items: center;
+    justify-content: center; padding: 0; transition: background 0.15s; vertical-align: top;
+}
+.ql-toolbar .ql-custom-size button:hover { background: #f0f0f0; border-color: #999; }
+.ql-toolbar .ql-custom-size button svg { opacity: 0.6; width: 14px; height: 14px; }
+.ql-toolbar .ql-custom-size button:hover svg { opacity: 0.9; }
+
+/* === Dark Mode — 编辑器适配 === */
+@media (prefers-color-scheme: dark) {
+    .ql-toolbar.ql-snow {
+        background: #1a2332; border-color: var(--border, #334155);
+    }
+    .ql-toolbar.ql-snow .ql-stroke { stroke: #94a3b8; }
+    .ql-toolbar.ql-snow .ql-fill { fill: #94a3b8; }
+    .ql-toolbar.ql-snow button:hover .ql-stroke,
+    .ql-toolbar.ql-snow .ql-picker-label:hover .ql-stroke { stroke: var(--primary, #60a5fa); }
+    .ql-toolbar.ql-snow button:hover .ql-fill,
+    .ql-toolbar.ql-snow .ql-picker-label:hover .ql-fill { fill: var(--primary, #60a5fa); }
+    .ql-container.ql-snow {
+        background: var(--card-bg, #1e293b); border-color: var(--border, #334155);
+        color: var(--text, #e2e8f0);
+    }
+    .ql-editor.ql-blank::before { color: #64748b; }
+    .ql-snow .ql-picker { color: #94a3b8; }
+    .ql-snow .ql-picker-options { background: #1e293b; border-color: var(--border, #334155); }
+    .ql-snow .ql-picker-label:hover,
+    .ql-snow .ql-picker-item:hover { color: var(--primary, #60a5fa); }
+
+    /* 自定义字号按钮 */
+    .ql-toolbar .ql-custom-size input[type="number"] {
+        background: #1e293b; color: var(--text, #e2e8f0); border-color: var(--border, #334155);
+    }
+    .ql-toolbar .ql-custom-size button {
+        background: #334155; border-color: var(--border, #334155);
+    }
+    .ql-toolbar .ql-custom-size button:hover { background: #475569; border-color: #64748b; }
+    .ql-toolbar .ql-custom-size button svg { opacity: 0.8; }
+
+    /* 颜色按钮 */
+    .ql-toolbar .ql-color-btn:hover { background: #334155; }
+
+    /* 调色盘 */
+    .color-palette { background: #1e293b; border-color: var(--border, #334155); }
+    .color-palette .color-swatch { border-color: #475569; }
+    .color-palette .color-custom-btn { background: #1a2332; border-color: #475569; color: #94a3b8; }
+    .color-palette .color-custom-btn:hover { background: #334155; border-color: #64748b; }
+    .color-hex-input { background: #1a2332; color: var(--text, #e2e8f0); border-color: var(--border, #334155); }
+    .color-hex-input:focus { border-color: var(--primary, #60a5fa); }
+
+    /* 上传区 */
+    .upload-area { background: #1a2332; }
+    .upload-area .upload-status { color: #94a3b8; }
+    .file-input-btn { background: #1e293b; border-color: var(--border, #334155); }
+    .file-input-btn:hover { background: #1e3a5f; }
+    .file-input-name { color: #94a3b8; }
+
+    /* 图片尺寸条 */
+    .img-size-bar { background: #1e293b; border-color: var(--border, #334155); box-shadow: 0 2px 12px rgba(0,0,0,0.5); }
+    .img-size-bar button { color: #94a3b8; background: #334155; border-color: var(--border, #334155); }
+    .img-size-bar button:hover { background: #475569; }
+    .img-size-bar input { background: #1e293b; color: var(--text, #e2e8f0); border-color: var(--border, #334155); }
+
+    /* 媒体库弹窗 */
+    .media-modal-body { background: #1e293b; }
+    .media-modal-header { border-bottom-color: var(--border, #334155); }
+    .media-item { background: #1a2332; }
+    .media-item:hover { border-color: var(--primary, #60a5fa) !important; }
+}
+
+/* --- 编辑器代码块样式 --- */
+.ql-snow .ql-editor [spellcheck="false"],
+.ql-snow .ql-editor [spellcheck="false"] * {
+    font-size: 14px;
+    font-family: 'Consolas','Monaco','Courier New',monospace;
+}
+</style>
+<script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+
+<script>
+var CSRF_TOKEN = '{{ csrf_token }}';
+
+function prepareSubmit() {
+    var html = quill.root.innerHTML;
+    html = html.replace(/▶VIDEO:(\/static\/uploads\/[a-zA-Z0-9_.-]+)/g,
+        '<video src="$1" controls style="max-width:100%;border-radius:6px;display:block;"></video>');
+    document.getElementById('content-hidden').value = html;
+    return true;
+}
+
+// 解除字号白名单限制，允许自定义 px 值
+var SizeStyle = Quill.import('attributors/style/size');
+SizeStyle.whitelist = null;
+Quill.register(SizeStyle, true);
+
+// 扩展字体白名单，支持中文字体
+var Font = Quill.import('formats/font');
+Font.whitelist = ['', 'yahei', 'songti', 'kaiti', 'fangsong', 'arial', 'serif', 'monospace'];
+Quill.register(Font, true);
+
+// 解除代码块格式化限制，将 format/formats/allowedChildren/optimize 重置为普通 Block 的行为
+var CodeBlock = Quill.import('formats/code-block');
+var BlockBlot = Quill.import('blots/block');
+if (CodeBlock && BlockBlot) {
+    CodeBlock.formats = BlockBlot.formats;
+    CodeBlock.allowedChildren = BlockBlot.allowedChildren;
+    CodeBlock.prototype.format = BlockBlot.prototype.format;
+    CodeBlock.prototype.formatAt = BlockBlot.prototype.formatAt;
+    CodeBlock.prototype.optimize = BlockBlot.prototype.optimize;
+}
+
+var quill = new Quill('#editor-container', {
+    theme: 'snow',
+    placeholder: '开始写作...',
+    modules: {
+        toolbar: [
+            [{ 'header': [1, 2, 3, false] }],
+            [{ 'font': [false, 'yahei', 'songti', 'kaiti', 'fangsong', 'arial', 'serif', 'monospace'] }],
+            [{ 'size': ['12px', '14px', '16px', '18px', '20px', '24px', '28px', '32px', '40px', '48px', false] }],
+            ['bold', 'italic', 'underline', 'strike'],
+            [{ 'align': [] }],
+            [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+            ['blockquote', 'code-block'],
+            ['link'],
+            ['clean']
+        ]
+    }
+});
+
+// --- 汉化工具栏 ---
+setTimeout(function() {
+    var t = document.querySelector('.ql-toolbar');
+    if (!t) return;
+
+    var tip = {
+        'ql-bold':'加粗 Ctrl+B', 'ql-italic':'斜体 Ctrl+I', 'ql-underline':'下划线 Ctrl+U',
+        'ql-strike':'删除线', 'ql-blockquote':'引用', 'ql-code-block':'代码块',
+        'ql-link':'插入链接', 'ql-image':'插入图片', 'ql-clean':'清除格式'
+    };
+    t.querySelectorAll('button').forEach(function(b) {
+        for (var k in tip) { if (b.classList.contains(k)) { b.title = tip[k]; break; } }
+    });
+
+    // 段落格式
+    var hp = t.querySelector('.ql-header');
+    if (hp) hp.querySelector('.ql-picker-label').title = '段落格式';
+    // 字体
+    var fp = t.querySelector('.ql-font');
+    if (fp) fp.querySelector('.ql-picker-label').title = '字体';
+    // 字号
+    var sp = t.querySelector('.ql-size');
+    if (sp) sp.querySelector('.ql-picker-label').title = '字号';
+
+    // 对齐
+    var ap = t.querySelector('.ql-align');
+    if (ap) {
+        ap.querySelector('.ql-picker-label').title = '对齐方式';
+        ap.querySelectorAll('.ql-picker-item').forEach(function(i) {
+            var v = i.getAttribute('data-value');
+            i.innerHTML = '<svg viewBox="0 0 18 18" style="width:18px;height:18px;">' +
+                (v===''?'<line x1="3" y1="5" x2="15" y2="5" stroke="currentColor" stroke-width="2"/><line x1="3" y1="9" x2="13" y2="9" stroke="currentColor" stroke-width="2"/><line x1="3" y1="13" x2="9" y2="13" stroke="currentColor" stroke-width="2"/>' :
+                 v==='center'?'<line x1="4" y1="5" x2="14" y2="5" stroke="currentColor" stroke-width="2"/><line x1="6" y1="9" x2="12" y2="9" stroke="currentColor" stroke-width="2"/><line x1="3" y1="13" x2="15" y2="13" stroke="currentColor" stroke-width="2"/>' :
+                 v==='right'?'<line x1="3" y1="5" x2="15" y2="5" stroke="currentColor" stroke-width="2"/><line x1="5" y1="9" x2="15" y2="9" stroke="currentColor" stroke-width="2"/><line x1="9" y1="13" x2="15" y2="13" stroke="currentColor" stroke-width="2"/>' :
+                 '<line x1="3" y1="5" x2="15" y2="5" stroke="currentColor" stroke-width="2"/><line x1="3" y1="9" x2="15" y2="9" stroke="currentColor" stroke-width="2"/><line x1="3" y1="13" x2="15" y2="13" stroke="currentColor" stroke-width="2"/>') +
+                '</svg>';
+        });
+    }
+
+    // 列表 (两个独立按钮)
+    var ol = t.querySelector('.ql-list[value="ordered"]');
+    var ul = t.querySelector('.ql-list[value="bullet"]');
+    if (ol) ol.title = '有序列表';
+    if (ul) ul.title = '无序列表';
+
+    // --- 内置调色盘 ---
+    var PALETTE_COLORS = [
+        ['#000000','#333333','#666666','#999999','#CCCCCC','#FFFFFF'],
+        ['#E60000','#FF6600','#FFCC00','#00AA00','#0066CC','#6600CC'],
+        ['#FF4444','#FF8800','#FFDD44','#44CC44','#4488FF','#AA44FF'],
+        ['#8B0000','#CC5500','#B8860B','#006400','#00008B','#4B0082'],
+        ['#FFE0E0','#FFE8D0','#FFF8D0','#E0FFE0','#E0E8FF','#F0E0FF'],
+        ['#F5F5F5','#E0E0E0','#BDBDBD','#9E9E9E','#616161','#424242']
+    ];
+
+    var paletteEl = document.createElement('div');
+    paletteEl.className = 'color-palette';
+    PALETTE_COLORS.forEach(function(row) {
+        var rowDiv = document.createElement('div');
+        rowDiv.className = 'color-row';
+        row.forEach(function(c) {
+            var sw = document.createElement('span');
+            sw.className = 'color-swatch' + (c === '#FFFFFF' ? ' swatch-white' : '');
+            sw.style.backgroundColor = c;
+            sw.title = c;
+            function applySwatch(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                saveSelection();
+                if (savedRange) {
+                    quill.formatText(savedRange.index, savedRange.length, paletteType, c);
+                }
+                paletteEl.classList.remove('show');
+                activeBtn = null;
+            }
+            sw.addEventListener('click', applySwatch);
+            sw.addEventListener('touchstart', applySwatch);
+            rowDiv.appendChild(sw);
+        });
+        paletteEl.appendChild(rowDiv);
+    });
+    var customBtn = document.createElement('span');
+    customBtn.className = 'color-custom-btn';
+    customBtn.textContent = '更多颜色...';
+    // 十六进制颜色输入
+    var hexRow = document.createElement('div');
+    hexRow.className = 'color-row color-hex-row';
+    var hexInput = document.createElement('input');
+    hexInput.type = 'text';
+    hexInput.placeholder = '#十六进制';
+    hexInput.className = 'color-hex-input';
+    hexInput.maxLength = 7;
+    hexInput.title = '输入颜色代码后按回车或点击右侧应用';
+    var hexLastApply = 0;
+    function applyHex(e) {
+        var now = Date.now();
+        if (now - hexLastApply < 300) return;
+        hexLastApply = now;
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        var raw = hexInput.value.trim();
+        if (raw.length > 0 && raw[0] !== '#') raw = '#' + raw;
+        if (/^#[0-9a-fA-F]{6}$/.test(raw)) {
+            if (savedRange) {
+                quill.formatText(savedRange.index, savedRange.length, paletteType, raw.toUpperCase());
+                savedRange = null;
+            }
+            hexInput.value = '';
+            paletteEl.classList.remove('show');
+            activeBtn = null;
+        } else {
+            hexInput.style.borderColor = '#dc2626';
+            setTimeout(function() { hexInput.style.borderColor = ''; }, 600);
+        }
+    }
+    function captureAndApplyHex(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        saveSelection();
+        applyHex(e);
+    }
+    hexInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); saveSelection(); applyHex(e); }
+        if (e.key === 'Escape') { hexInput.value = ''; paletteEl.classList.remove('show'); activeBtn = null; }
+    });
+    hexInput.addEventListener('pointerdown', function(e) { e.stopPropagation(); saveSelection(); });
+    hexInput.addEventListener('touchstart', function(e) { e.stopPropagation(); saveSelection(); });
+    hexInput.addEventListener('mousedown', function(e) { e.stopPropagation(); saveSelection(); });
+    var hexApplyBtn = document.createElement('button');
+    hexApplyBtn.type = 'button';
+    hexApplyBtn.className = 'color-hex-apply';
+    hexApplyBtn.textContent = '应用';
+    hexApplyBtn.title = '应用颜色';
+    hexApplyBtn.addEventListener('pointerdown', captureAndApplyHex);
+    hexApplyBtn.addEventListener('touchstart', captureAndApplyHex);
+    hexApplyBtn.addEventListener('mousedown', captureAndApplyHex);
+    hexRow.appendChild(hexInput);
+    hexRow.appendChild(hexApplyBtn);
+    paletteEl.appendChild(hexRow);
+    var customInput = document.createElement('input');
+    customInput.type = 'color';
+    customInput.value = '#000000';
+    customInput.addEventListener('input', function() {
+        saveSelection();
+        if (savedRange) {
+            quill.formatText(savedRange.index, savedRange.length, paletteType, customInput.value);
+        }
+        paletteEl.classList.remove('show');
+    });
+    function openCustomPicker(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        customInput.click();
+    }
+    customBtn.addEventListener('click', openCustomPicker);
+    customBtn.addEventListener('touchstart', openCustomPicker);
+    paletteEl.appendChild(customInput);
+    paletteEl.appendChild(customBtn);
+    document.body.appendChild(paletteEl);
+
+    var paletteType = 'color';
+    var activeBtn = null;
+
+    function togglePalette(btn, typeName) {
+        saveSelection();
+        if (paletteEl.classList.contains('show') && activeBtn === btn) {
+            paletteEl.classList.remove('show');
+            activeBtn = null;
+            return;
+        }
+        paletteType = typeName;
+        activeBtn = btn;
+        var rect = btn.getBoundingClientRect();
+        paletteEl.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+        paletteEl.style.left = (rect.left + window.scrollX + rect.width / 2) + 'px';
+        paletteEl.classList.add('show');
+    }
+
+    function createColorBtn(typeName, iconSVG, title) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ql-color-btn';
+        btn.title = title;
+        btn.innerHTML = iconSVG;
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            togglePalette(btn, typeName);
+        });
+        // 手机 touchstart 先触发并阻止后续 click，避免重复 toggle
+        btn.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            togglePalette(btn, typeName);
+        });
+        return btn;
+    }
+
+    document.addEventListener('click', function(e) {
+        if (paletteEl.classList.contains('show') &&
+            !paletteEl.contains(e.target) &&
+            !e.target.closest('.ql-color-btn')) {
+            paletteEl.classList.remove('show');
+            activeBtn = null;
+        }
+    });
+
+    // 找到加粗按钮所在的 .ql-formats，将颜色按钮插入其后
+    var boldBtn = t.querySelector('.ql-bold');
+    if (boldBtn) {
+        var fmtGroup = boldBtn.closest('.ql-formats');
+        var textColorBtn = createColorBtn('color',
+            '<svg viewBox="0 0 18 18" fill="currentColor"><text x="9" y="13.5" text-anchor="middle" font-size="13" font-weight="700" font-family="sans-serif">A</text><rect x="3" y="15" width="12" height="2.5" rx="1" fill="currentColor" opacity="0.35"/></svg>',
+            '文字颜色');
+        var bgColorBtn = createColorBtn('background',
+            '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 16v-3l8-8 3 3L5 16H2z"/><path d="M10 2l3 3"/></svg>',
+            '背景颜色');
+        fmtGroup.appendChild(textColorBtn);
+        fmtGroup.appendChild(bgColorBtn);
+    }
+
+    // --- 保存选区，防止点击输入框/工具栏按钮时丢失 ---
+    var savedRange = null;
+    quill.on('selection-change', function(range) {
+        if (range && range.length > 0) savedRange = range;
+    });
+
+    // 兜底：用原生 Selection API 获取选区（vivo 等定制浏览器 Quill 可能拿不到）
+    function getNativeRange() {
+        var sel = quill.getSelection();
+        if (sel && sel.length > 0) return sel;
+        var ns = window.getSelection();
+        if (!ns || ns.rangeCount === 0 || ns.isCollapsed) return null;
+        var r = ns.getRangeAt(0);
+        if (!quill.root.contains(r.commonAncestorContainer)) return null;
+        try {
+            var start = quill.getIndex(r.startContainer, r.startOffset);
+            return { index: start, length: r.toString().length };
+        } catch(e) { return null; }
+    }
+
+    function saveSelection() {
+        var r = getNativeRange();
+        if (r) savedRange = r;
+    }
+
+    // 拦截 format()，手机端选区丢失时自动用保存的选区
+    var _origFormat = quill.format.bind(quill);
+    quill.format = function(name, value, source) {
+        if (!getNativeRange() && savedRange) {
+            quill.formatText(savedRange.index, savedRange.length, name, value, source || 'user');
+            savedRange = null;
+            return;
+        }
+        return _origFormat(name, value, source);
+    };
+
+    // --- 自定义字号输入框 ---
+    var sizePicker = t.querySelector('.ql-size');
+    if (sizePicker) {
+        var wrap = document.createElement('span');
+        wrap.className = 'ql-custom-size';
+        var inp = document.createElement('input');
+        inp.type = 'number'; inp.placeholder = 'px'; inp.min = 8; inp.max = 200;
+        inp.title = '输入字号后点击右侧按钮应用';
+        var btn = document.createElement('button');
+        btn.type = 'button'; btn.title = '应用自定义字号';
+        btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
+        var lastApply = 0;
+        function applySize() {
+            var now = Date.now();
+            if (now - lastApply < 300) return;
+            lastApply = now;
+            var v = parseInt(inp.value);
+            if (v && v >= 8 && v <= 200) {
+                // 在 handler 中已经捕获了选区，这里直接用 savedRange
+                if (savedRange) {
+                    quill.formatText(savedRange.index, savedRange.length, 'size', v + 'px');
+                    savedRange = null;
+                }
+                inp.value = '';
+            }
+        }
+        function captureAndApply(e) {
+            e.preventDefault();
+            saveSelection();
+            applySize();
+        }
+        btn.addEventListener('pointerdown', captureAndApply);
+        btn.addEventListener('touchstart', captureAndApply);
+        btn.addEventListener('mousedown', captureAndApply);
+        // 输入框：在失焦前保存选区
+        inp.addEventListener('pointerdown', function(e) { saveSelection(); });
+        inp.addEventListener('touchstart', function(e) { e.stopPropagation(); saveSelection(); });
+        inp.addEventListener('mousedown', function(e) { saveSelection(); });
+        inp.addEventListener('focus', function(e) { saveSelection(); });
+        inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); captureAndApply(e); } });
+        wrap.appendChild(inp);
+        wrap.appendChild(btn);
+        sizePicker.parentNode.insertBefore(wrap, sizePicker.nextSibling);
+    }
+}, 50);
+
+// Load existing content
+var existing = document.getElementById('content-hidden').value;
+if (existing.trim()) {
+    existing = existing.replace(/<video[^>]*src="(\/static\/uploads\/[a-zA-Z0-9_.-]+)"[^>]*><\/video>/gi, '▶VIDEO:$1');
+    quill.root.innerHTML = existing;
+}
+
+// Image upload
+document.getElementById('upload-btn').addEventListener('click', function() {
+    var fileInput = document.getElementById('image-file');
+    var file = fileInput.files[0];
+    var status = document.getElementById('upload-status');
+    if (!file) { status.textContent = '请先选择图片文件'; return; }
+    status.textContent = '上传中...';
+    status.style.color = '';
+    var formData = new FormData();
+    formData.append('file', file);
+    formData.append('csrf_token', CSRF_TOKEN);
+    fetch('{{ url_for("admin_upload") }}', {
+        method: 'POST',
+        body: formData,
+        credentials: 'same-origin'
+    })
+    .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status + ' - 请确认已登录后台');
+        return r.json();
+    })
+    .then(function(data) {
+        if (data.ok) {
+            var range = quill.getSelection(true);
+            quill.insertEmbed(range.index, 'image', data.url);
+            quill.setSelection(range.index + 1);
+            status.textContent = '上传成功！';
+            status.style.color = '#16a34a';
+        } else {
+            status.textContent = '上传失败: ' + data.error;
+            status.style.color = '#dc2626';
+        }
+    })
+    .catch(function(e) {
+        status.textContent = e.message || '上传失败，请重试';
+        status.style.color = '#dc2626';
+    });
+});
+
+// URL image insert
+document.getElementById('insert-url-btn').addEventListener('click', function() {
+    var url = document.getElementById('image-url').value.trim();
+    if (!url) return;
+    var range = quill.getSelection(true);
+    quill.insertEmbed(range.index, 'image', url);
+    quill.setSelection(range.index + 1);
+    document.getElementById('image-url').value = '';
+});
+
+// Attachment upload
+document.getElementById('attach-upload-btn').addEventListener('click', function() {
+    var fileInput = document.getElementById('attach-file');
+    var file = fileInput.files[0];
+    var status = document.getElementById('upload-status');
+    if (!file) { status.textContent = '请先选择文件'; return; }
+    status.textContent = '上传中...';
+    status.style.color = '';
+    var formData = new FormData();
+    formData.append('file', file);
+    formData.append('csrf_token', CSRF_TOKEN);
+    fetch('{{ url_for("admin_upload_attachment") }}', {
+        method: 'POST',
+        body: formData,
+        credentials: 'same-origin'
+    })
+    .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status + ' - 请确认已登录后台');
+        return r.json();
+    })
+    .then(function(data) {
+        if (data.ok) {
+            var range = quill.getSelection(true);
+            var sizeStr = data.size > 1048576 ? (data.size / 1048576).toFixed(1) + ' MB'
+                : data.size > 1024 ? (data.size / 1024).toFixed(0) + ' KB'
+                : data.size + ' B';
+            quill.insertText(range.index, '[[attachment:' + data.url + '::' + data.filename + '::' + sizeStr + ']]\n');
+            quill.setSelection(range.index + 1);
+            status.textContent = '附件上传成功！';
+            status.style.color = '#16a34a';
+            fileInput.value = '';
+            updateFileName(fileInput);
+        } else {
+            status.textContent = '上传失败: ' + data.error;
+            status.style.color = '#dc2626';
+        }
+    })
+    .catch(function(e) {
+        status.textContent = e.message || '上传失败，请重试';
+        status.style.color = '#dc2626';
+    });
+});
+
+// Video upload
+var videoUploadBtn = document.getElementById('video-upload-btn');
+if (videoUploadBtn) {
+videoUploadBtn.addEventListener('click', function() {
+    var fileInput = document.getElementById('video-file');
+    var file = fileInput.files[0];
+    var status = document.getElementById('upload-status');
+    if (!file) { status.textContent = '请先选择视频文件'; return; }
+    status.textContent = '上传中...';
+    status.style.color = '';
+    var formData = new FormData();
+    formData.append('file', file);
+    formData.append('csrf_token', CSRF_TOKEN);
+    fetch('{{ url_for("admin_upload_video") }}', {
+        method: 'POST',
+        body: formData,
+        credentials: 'same-origin'
+    })
+    .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status + ' - 请确认已登录后台');
+        return r.json();
+    })
+    .then(function(data) {
+        if (data.ok) {
+            var range = quill.getSelection(true);
+            quill.insertText(range.index, '\n▶VIDEO:' + data.url + '\n', { bold: true });
+            quill.setSelection(range.index + 1);
+            status.textContent = '视频上传成功！';
+            status.style.color = '#16a34a';
+        } else {
+            status.textContent = '上传失败: ' + data.error;
+            status.style.color = '#dc2626';
+        }
+    })
+    .catch(function(e) {
+        status.textContent = e.message || '上传失败，请重试';
+        status.style.color = '#dc2626';
+    });
+});
+} // end if (videoUploadBtn)
+
+// Media library (images)
+var mediaModal = document.getElementById('media-modal');
+var mediaGrid = document.getElementById('media-grid');
+
+document.getElementById('media-btn').addEventListener('click', function() {
+    mediaModal.style.display = 'block';
+    document.getElementById('media-modal-title').textContent = '媒体库';
+    mediaGrid.className = 'media-grid';
+    if (mediaGrid.dataset.loaded) return;
+    fetch('{{ url_for("admin_images_list") }}', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(imgs) {
+            mediaGrid.innerHTML = '';
+            if (imgs.length === 0) {
+                mediaGrid.innerHTML = '<p style="color:var(--text-secondary);text-align:center;padding:40px;">暂无媒体文件</p>';
+                return;
+            }
+            mediaGrid.dataset.loaded = '1';
+            imgs.forEach(function(img) {
+                var el = document.createElement('div');
+                el.className = 'media-item';
+                if (img.is_video) {
+                    if (img.thumb_url && img.thumb_url !== img.url) {
+                        el.style.backgroundImage = 'url(' + img.thumb_url + ')';
+                        el.style.backgroundSize = 'cover';
+                        el.style.backgroundPosition = 'center';
+                    } else {
+                        el.style.backgroundColor = '#1e293b';
+                    }
+                    el.innerHTML = '<div class="media-video-icon">' +
+                        '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2">' +
+                        '<polygon points="5 3 19 12 5 21 5 3" fill="#94a3b8" stroke="none"/></svg>' +
+                        '</div><span class="media-type-badge">视频</span>';
+                } else {
+                    el.innerHTML = '<img src="' + img.url + '" loading="lazy" title="' + img.name + '">';
+                }
+                el.onclick = function() {
+                    var range = quill.getSelection(true);
+                    if (img.is_video) {
+                        quill.insertText(range.index, '\n▶VIDEO:' + img.url + '\n', { bold: true });
+                        quill.setSelection(range.index + 1);
+                    } else {
+                        quill.insertEmbed(range.index, 'image', img.url);
+                        quill.setSelection(range.index + 1);
+                    }
+                    mediaModal.style.display = 'none';
+                };
+                mediaGrid.appendChild(el);
+            });
+            // Client-side video thumbnail generation for videos without server thumbnails
+            imgs.forEach(function(img, i) {
+                if (img.is_video && (!img.thumb_url || img.thumb_url === img.url)) {
+                    var el = mediaGrid.children[i];
+                    if (!el) return;
+                    var video = document.createElement('video');
+                    video.preload = 'metadata';
+                    video.muted = true;
+                    video.playsInline = true;
+                    video.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;';
+                    document.body.appendChild(video);
+                    video.src = img.url;
+                    var done = false;
+                    video.onloadedmetadata = function() {
+                        if (!done && video.duration) {
+                            video.currentTime = Math.min(1, video.duration * 0.1);
+                        }
+                    };
+                    video.onseeked = function() {
+                        if (done) return;
+                        done = true;
+                        try {
+                            var canvas = document.createElement('canvas');
+                            canvas.width = 360;
+                            canvas.height = Math.floor(canvas.width / video.videoWidth * video.videoHeight) || 200;
+                            var ctx = canvas.getContext('2d');
+                            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                            el.style.backgroundImage = 'url(' + canvas.toDataURL('image/jpeg', 0.7) + ')';
+                            el.style.backgroundSize = 'cover';
+                            el.style.backgroundPosition = 'center';
+                            el.style.backgroundColor = 'transparent';
+                        } catch(e) {}
+                        document.body.removeChild(video);
+                    };
+                    video.onerror = function() { document.body.removeChild(video); };
+                    setTimeout(function() { if (!done) { done = true; document.body.contains(video) && document.body.removeChild(video); } }, 8000);
+                }
+            });
+        })
+        .catch(function() {
+            mediaGrid.innerHTML = '<p style="color:var(--danger);text-align:center;">加载失败</p>';
+        });
+});
+
+// Attachment library
+document.getElementById('attach-lib-btn').addEventListener('click', function() {
+    mediaModal.style.display = 'block';
+    document.getElementById('media-modal-title').textContent = '附件库';
+    mediaGrid.className = '';
+    mediaGrid.dataset.loaded = '';
+    mediaGrid.innerHTML = '<p style="color:var(--text-secondary);text-align:center;padding:40px;">加载中...</p>';
+    fetch('{{ url_for("admin_attachments_list") }}', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(items) {
+            mediaGrid.innerHTML = '';
+            if (items.length === 0) {
+                mediaGrid.innerHTML = '<p style="color:var(--text-secondary);text-align:center;padding:40px;">暂无附件</p>';
+                return;
+            }
+            items.forEach(function(item) {
+                var el = document.createElement('div');
+                el.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:6px;cursor:pointer;transition:all 0.15s;';
+                el.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>' +
+                    '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.85rem;">' + item.name + '</span>' +
+                    '<span style="color:var(--primary);font-size:0.8rem;font-weight:500;white-space:nowrap;">插入</span>';
+                el.onmouseenter = function() { el.style.borderColor = 'var(--primary)'; el.style.background = '#eff6ff'; };
+                el.onmouseleave = function() { el.style.borderColor = 'var(--border)'; el.style.background = ''; };
+                el.onclick = function() {
+                    var range = quill.getSelection(true);
+                    quill.insertText(range.index, '[[attachment:' + item.url + '::' + item.name + '::' + ']]\n');
+                    quill.setSelection(range.index + 1);
+                    mediaModal.style.display = 'none';
+                };
+                mediaGrid.appendChild(el);
+            });
+        })
+        .catch(function() {
+            mediaGrid.innerHTML = '<p style="color:var(--danger);text-align:center;">加载失败</p>';
+        });
+});
+
+    // --- Image resize toolbar ---
+    var sizeBar = document.createElement('div');
+    sizeBar.className = 'img-size-bar';
+    sizeBar.innerHTML =
+        '<button type="button" data-w="200">小</button>' +
+        '<button type="button" data-w="400">中</button>' +
+        '<button type="button" data-w="600">大</button>' +
+        '<button type="button" data-w="100%">全宽</button>' +
+        '<span class="img-size-sep"></span>' +
+        '<input type="number" class="img-size-input" placeholder="px" min="20" max="2000">' +
+        '<button type="button" data-apply="1">确定</button>';
+    document.body.appendChild(sizeBar);
+
+    var currentImg = null;
+
+    function applySize(img, val) {
+        if (val === '100%') {
+            img.removeAttribute('width');
+            img.style.width = '100%';
+            img.style.height = 'auto';
+        } else {
+            img.setAttribute('width', val);
+            img.style.width = val + 'px';
+            img.style.height = 'auto';
+        }
+    }
+
+    function hideBar() {
+        sizeBar.classList.remove('show');
+        currentImg = null;
+    }
+
+    quill.root.addEventListener('click', function(e) {
+        if (e.target.tagName === 'IMG') {
+            e.stopPropagation();
+            currentImg = e.target;
+            var ir = currentImg.getBoundingClientRect();
+            var top = ir.top - 44;
+            if (top < 10) top = ir.bottom + 8;
+            var left = ir.left + ir.width / 2 - 146;
+            if (left < 8) left = 8;
+            if (left + 300 > window.innerWidth) left = window.innerWidth - 308;
+            sizeBar.style.top = top + 'px';
+            sizeBar.style.left = left + 'px';
+            sizeBar.classList.add('show');
+        } else if (!e.target.closest('.img-size-bar')) {
+            hideBar();
+        }
+    });
+
+    sizeBar.addEventListener('click', function(e) {
+        if (!currentImg) return;
+        e.stopPropagation();
+        var w = e.target.getAttribute('data-w');
+        if (w) {
+            applySize(currentImg, w);
+            sizeBar.classList.remove('show');
+            currentImg = null;
+            return;
+        }
+        if (e.target.getAttribute('data-apply')) {
+            var input = sizeBar.querySelector('.img-size-input');
+            var px = parseInt(input.value);
+            if (px && px >= 20) {
+                applySize(currentImg, px);
+                input.value = '';
+                sizeBar.classList.remove('show');
+                currentImg = null;
+            }
+            return;
+        }
+    });
+
+    // --- 未保存离开提示 ---
+    var editDirty = false;
+    function markDirty() { editDirty = true; }
+    quill.on('text-change', markDirty);
+    document.querySelectorAll('#article-form input, #article-form textarea').forEach(function(el) {
+        el.addEventListener('input', markDirty);
+        el.addEventListener('change', markDirty);
+    });
+    window.addEventListener('beforeunload', function(e) {
+        if (editDirty) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
+    document.getElementById('article-form').addEventListener('submit', function() {
+        editDirty = false;
+    });
+</script>
+{% endblock %}

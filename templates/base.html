@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
+    <title>{% block title %}{{ site_title }}{% endblock %}</title>
+    <link rel="stylesheet" href="{{ static_v('style.css') }}">
+    {% if bg_image %}
+    <link rel="preload" href="{{ bg_image }}" as="image">
+    {% endif %}
+</head>
+<body>
+    {% if bg_image %}
+    <div class="bg-wrapper"><div class="bg-blur" style="background-image: url('{{ bg_image }}'); filter: blur({{ bg_blur }}px)"></div></div>
+    {% endif %}
+
+    {% if profile_title or profile_content %}
+    <aside class="home-sidebar">
+        <div class="profile-widget">
+            <h3 class="profile-title">{{ profile_title or '关于我' }}</h3>
+            <div class="profile-content">{{ profile_content | replace('\r', '') | replace('\n', '<br>') | safe }}</div>
+        </div>
+    </aside>
+    {% endif %}
+
+    <nav class="navbar">
+        <div class="container">
+            <a href="{{ url_for('index') }}" class="logo">{{ site_title }}</a>
+            <div class="nav-links">
+                <a href="{{ url_for('index') }}">首页</a>
+                {% if session.user_id %}
+                    <a href="{{ url_for('user_avatar') }}" class="nav-avatar-link" title="修改头像">
+                        {% if current_user and current_user.avatar %}
+                            <img src="{{ current_user.avatar }}" alt="" class="nav-avatar">
+                        {% else %}
+                            <span class="nav-avatar nav-avatar-text">{{ session.username[0] | upper }}</span>
+                        {% endif %}
+                    </a>
+                    <span class="nav-user">{{ session.username }}</span>
+                    <a href="{{ url_for('change_password') }}">改密</a>
+                    <a href="{{ url_for('user_logout') }}">退出</a>
+                    {% if session.role == 'admin' %}
+                        <a href="{{ url_for('admin_dashboard') }}">后台</a>
+                    {% endif %}
+                {% else %}
+                    <a href="{{ url_for('user_login') }}">登录</a>
+                    <a href="{{ url_for('user_register') }}">注册</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <main class="container">
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for msg in messages %}
+                        <div class="flash-msg">{{ msg }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 {{ site_title }}. Powered by Flask.</p>
+        </div>
+    </footer>
+    <script>
+    function updateFileName(input) {
+        var name = input.files && input.files[0] ? input.files[0].name : '未选择文件';
+        var el = document.getElementById(input.id + '-name');
+        if (el) el.textContent = name;
+    }
+    </script>
+</body>
+</html>

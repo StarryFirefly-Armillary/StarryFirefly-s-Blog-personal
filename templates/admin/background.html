@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}背景图设置 - 繁星绘流萤{% endblock %}
+{% block content %}
+<div class="admin-header">
+    <h2>背景图设置</h2>
+    <div class="admin-actions">
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">← 返回后台</a>
+    </div>
+</div>
+
+<div class="admin-form">
+    {% if bg_image %}
+    <div class="bg-preview-wrap">
+        <h4>当前背景图</h4>
+        <img src="{{ bg_image }}" alt="当前背景图" class="bg-preview-img">
+        <p class="bg-preview-url">{{ bg_image }}</p>
+    </div>
+
+    <form method="POST" class="blur-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label for="blur-range">高斯模糊: <strong id="blur-val">{{ bg_blur }}</strong>px</label>
+        <div class="blur-row">
+            <span>0</span>
+            <input type="range" name="blur" id="blur-range" min="1" max="40" value="{{ bg_blur }}" oninput="document.getElementById('blur-val').textContent=this.value">
+            <span>40</span>
+        </div>
+        <button type="submit" name="save_blur" value="1" class="btn">应用模糊</button>
+    </form>
+
+    <hr class="divider">
+
+    <form method="POST" style="text-align:center; margin-bottom:20px;" onsubmit="return confirm('确定移除背景图？模糊将恢复默认 18px。')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" name="remove" value="1" class="btn btn-danger">移除背景图</button>
+    </form>
+    <hr class="divider">
+    {% else %}
+    <p class="empty-state" style="padding:20px 0;">尚未设置背景图</p>
+    <hr class="divider">
+    {% endif %}
+
+    <form method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label for="bg-file">上传新背景图</label>
+        <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:12px;">建议尺寸 1920×1080，支持 jpg/png/webp</p>
+        <div class="upload-row">
+            <div class="file-input-wrap" style="flex:1;min-width:0;">
+                <input type="file" name="bg" id="bg-file" accept="image/*" onchange="updateFileName(this)">
+                <label for="bg-file" class="file-input-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    选择图片
+                </label>
+                <span class="file-input-name" id="bg-file-name">未选择文件</span>
+            </div>
+            <button type="submit" class="btn">上传</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

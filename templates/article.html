@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+{% block title %}{{ article.title }} - 繁星绘流萤{% endblock %}
+{% block content %}
+<style>
+/* Attachment card — defined here so Quill can't strip them */
+.attachment-card { margin: 18px 0; }
+.attachment-card a {
+    display: flex; align-items: center; gap: 14px;
+    padding: 16px 20px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    text-decoration: none; color: #1e293b;
+    transition: all 0.25s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.attachment-card a:hover {
+    border-color: #93c5fd;
+    background: #eff6ff;
+    box-shadow: 0 6px 16px rgba(59,130,246,0.12);
+    transform: translateY(-2px);
+}
+.att-icon {
+    width: 44px; height: 44px; border-radius: 10px;
+    background: #dbeafe; color: #3b82f6;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.3rem; flex-shrink: 0;
+    transition: transform 0.2s ease;
+}
+.attachment-card a:hover .att-icon { transform: scale(1.08); }
+.att-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.att-name {
+    font-size: 0.92rem; font-weight: 500;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.att-size { font-size: 0.78rem; color: #64748b; }
+.att-dl-btn {
+    flex-shrink: 0; width: 42px; height: 42px; border-radius: 10px;
+    background: #3b82f6; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.1rem;
+    transition: all 0.2s ease;
+}
+.attachment-card a:hover .att-dl-btn {
+    background: #2563eb; transform: scale(1.1);
+}
+</style>
+<article class="single-article">
+    <h1>{% if article.pinned %}<span class="pin-badge">置顶</span>{% endif %}<span class="article-title-text">{{ article.title }}</span></h1>
+    <div class="meta">
+        <time datetime="{{ article.created_at }}">{{ article.created_at[:16] if article.created_at }}</time>
+        <span class="article-id">#{{ article.id }}</span>
+    </div>
+    <div class="content">
+        {{ article.content | safe }}
+    </div>
+</article>
+
+<section class="comments-section">
+    <h3>评论 ({{ count_comments(comments) }})</h3>
+    {% if comments %}
+        <ul class="comment-list">
+            {% for c in comments %}
+                <li class="comment {% if c.author_role == 'admin' %}comment-admin{% endif %} {% if c.pinned %}comment-pinned{% endif %}">
+                    <div class="comment-body">
+                        {% if c.author_avatar %}
+                            <img src="{{ c.author_avatar }}" alt="" class="comment-avatar">
+                        {% else %}
+                            <span class="comment-avatar-text">{{ c.author[0] | upper }}</span>
+                        {% endif %}
+                        <div class="comment-main">
+                            <div class="comment-header">
+                                <span class="comment-author">
+                                    {% if c.author_role == 'admin' %}<span class="admin-badge">管理员</span>{% endif %}
+                                    {% if c.pinned %}<span class="pin-badge pin-badge-small">置顶</span>{% endif %}
+                                    <strong>{{ c.author }}</strong>
+                                </span>
+                                <span class="comment-meta-right">
+                                    <time>{{ c.created_at[:19] if c.created_at }}</time>
+                                    {% if session.user_id and (session.user_id == c.user_id or session.role == 'admin') %}
+                                        <button type="button" class="btn-small btn-edit-comment" onclick="toggleEdit({{ c.id }})">编辑</button>
+                                        <form method="POST" action="{{ url_for('delete_comment', comment_id=c.id) }}"
+                                              class="delete-comment-form" onsubmit="return confirm('确定删除这条评论？')">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                            <button type="submit" class="btn-delete-comment">删除</button>
+                                        </form>
+                                    {% endif %}
+                                </span>
+                            </div>
+                            <p class="comment-content-text">{{ c.content }}</p>
+                            {% if session.user_id and (session.user_id == c.user_id or session.role == 'admin') %}
+                            <div class="edit-form" id="edit-form-{{ c.id }}" style="display:none;">
+                                <form method="POST" action="{{ url_for('edit_comment', comment_id=c.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <textarea name="content" class="input" rows="3" required>{{ c.content }}</textarea>
+                                    <div class="edit-form-row">
+                                        <input type="datetime-local" name="created_at" class="input input-sm" value="{{ c.created_at[:19].replace(' ', 'T') if c.created_at }}">
+                                        <button type="submit" class="btn-small btn-primary">保存</button>
+                                        <button type="button" class="btn-small" onclick="toggleEdit({{ c.id }})">取消</button>
+                                    </div>
+                                </form>
+                            </div>
+                            {% endif %}
+                            {% if session.user_id %}
+                            <button type="button" class="btn-reply" onclick="toggleReply({{ c.id }})">回复</button>
+                            <div class="reply-form" id="reply-form-{{ c.id }}" style="display:none;">
+                                <form method="POST" action="{{ url_for('add_comment', article_id=article.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <input type="hidden" name="parent_id" value="{{ c.id }}">
+                                    <textarea name="content" class="input" rows="2" required maxlength="500" placeholder="回复 {{ c.author }}..."></textarea>
+                                    <div class="reply-form-row">
+                                        <button type="submit" class="btn-small btn-primary">回复</button>
+                                        <button type="button" class="btn-small" onclick="toggleReply({{ c.id }})">取消</button>
+                                    </div>
+                                </form>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if c.replies %}
+                        <ul class="reply-list">
+                            {% for r in c.replies %}
+                                <li class="reply {% if r.author_role == 'admin' %}comment-admin{% endif %}">
+                                    <div class="comment-body">
+                                        {% if r.author_avatar %}
+                                            <img src="{{ r.author_avatar }}" alt="" class="reply-avatar">
+                                        {% else %}
+                                            <span class="reply-avatar-text">{{ r.author[0] | upper }}</span>
+                                        {% endif %}
+                                        <div class="comment-main">
+                                            <div class="comment-header">
+                                                <span class="comment-author">
+                                                    {% if r.author_role == 'admin' %}<span class="admin-badge">管理员</span>{% endif %}
+                                                    <strong>{{ r.author }}</strong>
+                                                </span>
+                                                <span class="comment-meta-right">
+                                                    <time>{{ r.created_at[:19] if r.created_at }}</time>
+                                                    {% if session.user_id and (session.user_id == r.user_id or session.role == 'admin') %}
+                                                        <button type="button" class="btn-small btn-edit-comment" onclick="toggleEdit({{ r.id }})">编辑</button>
+                                                        <form method="POST" action="{{ url_for('delete_comment', comment_id=r.id) }}"
+                                                              class="delete-comment-form" onsubmit="return confirm('确定删除这条回复？')">
+                                                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                                            <button type="submit" class="btn-delete-comment">删除</button>
+                                                        </form>
+                                                    {% endif %}
+                                                </span>
+                                            </div>
+                                            <p class="comment-content-text">{{ r.content }}</p>
+                                            {% if session.user_id and (session.user_id == r.user_id or session.role == 'admin') %}
+                                            <div class="edit-form" id="edit-form-{{ r.id }}" style="display:none;">
+                                                <form method="POST" action="{{ url_for('edit_comment', comment_id=r.id) }}">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                                    <textarea name="content" class="input" rows="2" required>{{ r.content }}</textarea>
+                                                    <div class="edit-form-row">
+                                                        <input type="datetime-local" name="created_at" class="input input-sm" value="{{ r.created_at[:19].replace(' ', 'T') if r.created_at }}">
+                                                        <button type="submit" class="btn-small btn-primary">保存</button>
+                                                        <button type="button" class="btn-small" onclick="toggleEdit({{ r.id }})">取消</button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p class="no-comments">暂无评论，来说两句吧。</p>
+    {% endif %}
+
+    {% if session.user_id %}
+        <form method="POST" action="{{ url_for('add_comment', article_id=article.id) }}" class="comment-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <h4>发表评论</h4>
+            <p class="comment-as">以 <strong>{{ session.username }}</strong> 的身份评论</p>
+            <textarea name="content" placeholder="写点什么..." required maxlength="500" class="input" rows="4"></textarea>
+            <button type="submit" class="btn">发布评论</button>
+        </form>
+    {% else %}
+        <div class="comment-login-hint">
+            <p>请 <a href="{{ url_for('user_login') }}">登录</a> 或 <a href="{{ url_for('user_register') }}">注册</a> 后发表评论。</p>
+        </div>
+    {% endif %}
+</section>
+
+<div class="back-link">
+    <a href="{{ url_for('index') }}">← 返回首页</a>
+</div>
+
+<script>
+function toggleReply(id) { var f = document.getElementById('reply-form-' + id); f.style.display = f.style.display === 'none' ? 'block' : 'none'; }
+function toggleEdit(id) { var f = document.getElementById('edit-form-' + id); f.style.display = f.style.display === 'none' ? 'block' : 'none'; }
+
+// splitHtml: splits HTML by \n outside of tags, balances open tags across lines
+function splitHtmlLines(html) {
+    var lines = [];
+    var cur = '';
+    var inTag = false;
+    var openTags = [];
+    for (var i = 0; i < html.length; i++) {
+        var ch = html[i];
+        if (ch === '<') inTag = true;
+        if (ch === '\n' && !inTag) {
+            for (var t = openTags.length - 1; t >= 0; t--) cur += '</' + openTags[t].name + '>';
+            lines.push(cur);
+            cur = '';
+            for (var t = 0; t < openTags.length; t++) cur += openTags[t].fullTag;
+            continue;
+        }
+        cur += ch;
+        if (ch === '>') {
+            inTag = false;
+            var m = cur.match(/<(\/?)(\w+)([^>]*)>$/);
+            if (m) {
+                if (m[1] === '/') {
+                    var idx = openTags.length - 1;
+                    while (idx >= 0 && openTags[idx].name !== m[2].toLowerCase()) idx--;
+                    if (idx >= 0) openTags.splice(idx, 1);
+                } else if (!/\/\s*$/.test(m[3]) && !/^(br|hr|img|input|meta|link)$/i.test(m[2])) {
+                    openTags.push({name: m[2].toLowerCase(), fullTag: m[0]});
+                }
+            }
+        }
+    }
+    lines.push(cur);
+    return lines;
+}
+
+// Code block: line numbers + copy button (preserves inline HTML formatting)
+document.querySelectorAll('.single-article .content pre').forEach(function(pre) {
+    var rawText = pre.textContent;
+    var textLines = rawText.split('\n');
+    if (textLines.length > 0 && textLines[textLines.length - 1] === '') textLines.pop();
+    if (textLines.length === 0) textLines = [''];
+
+    var htmlLines = splitHtmlLines(pre.innerHTML);
+    if (htmlLines.length > 0 && htmlLines[htmlLines.length - 1].trim() === '') htmlLines.pop();
+    if (htmlLines.length === 0) htmlLines = [''];
+
+    var wrapper = document.createElement('code');
+    wrapper.className = 'code-block-wrapper';
+    for (var j = 0; j < htmlLines.length; j++) {
+        var row = document.createElement('div');
+        row.className = 'code-row';
+        var ln = document.createElement('span');
+        ln.className = 'code-ln';
+        ln.textContent = j + 1;
+        var txt = document.createElement('span');
+        txt.className = 'code-txt';
+        txt.innerHTML = htmlLines[j] || '&nbsp;';
+        row.appendChild(ln);
+        row.appendChild(txt);
+        wrapper.appendChild(row);
+    }
+
+    pre.innerHTML = '';
+    pre.appendChild(wrapper);
+
+    // Copy button (copies plain text)
+    var btn = document.createElement('button');
+    btn.className = 'code-copy-btn';
+    btn.textContent = '复制';
+    btn.onclick = function() {
+        var text = textLines.join('\n');
+        navigator.clipboard.writeText(text).then(function() {
+            btn.textContent = '已复制';
+            btn.classList.add('copied');
+            setTimeout(function() { btn.textContent = '复制'; btn.classList.remove('copied'); }, 2000);
+        }).catch(function() {
+            var ta = document.createElement('textarea');
+            ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+            document.body.appendChild(ta); ta.select();
+            document.execCommand('copy'); document.body.removeChild(ta);
+            btn.textContent = '已复制';
+            btn.classList.add('copied');
+            setTimeout(function() { btn.textContent = '复制'; btn.classList.remove('copied'); }, 2000);
+        });
+    };
+    pre.appendChild(btn);
+});
+</script>
+{% endblock %}

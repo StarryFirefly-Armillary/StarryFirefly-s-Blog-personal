@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}首页 - {{ site_title }}{% endblock %}
+{% block content %}
+<div class="blog-header">
+    <h1>{{ site_title }}的博客</h1>
+    <p class="subtitle">{{ site_subtitle }}</p>
+    <form method="GET" action="{{ url_for('index') }}" class="search-form">
+        <div class="search-box">
+            <input type="search" name="q" class="search-input" placeholder="搜索文章..." value="{{ query if query else '' }}" autocomplete="off">
+            <button type="submit" class="search-btn">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </button>
+        </div>
+        {% if query %}<a href="{{ url_for('index') }}" class="search-clear">清除</a>{% endif %}
+    </form>
+</div>
+
+{% if query %}
+    <p class="search-info">搜索 "<strong>{{ query }}</strong>" 找到 {{ articles|length }} 篇文章</p>
+{% endif %}
+
+<div class="home-main">
+{% if articles %}
+    <div class="article-list">
+        {% for a in articles %}
+            <article class="article-card {% if a.pinned %}pinned{% endif %} {% if a.thumbnail %}has-thumbnail{% endif %}">
+                <div class="article-card-body">
+                    <h2>
+                        {% if a.pinned %}<span class="pin-badge">置顶</span>{% endif %}
+                        <a href="{{ url_for('article', article_id=a.id) }}">{{ a.title }}</a>
+                    </h2>
+                    <div class="meta">
+                        <time>{{ a.created_at[:16] if a.created_at }}</time>
+                    </div>
+                    {% if a.summary %}<p class="summary">{{ a.summary }}</p>{% endif %}
+                    <a href="{{ url_for('article', article_id=a.id) }}" class="read-more">阅读全文 →</a>
+                </div>
+                {% if a.thumbnail %}
+                    <a href="{{ url_for('article', article_id=a.id) }}" class="article-thumb">
+                        <img src="{{ a.thumbnail }}" alt="" loading="lazy">
+                    </a>
+                {% endif %}
+            </article>
+        {% endfor %}
+    </div>
+
+    {% if total_pages > 1 %}
+        <div class="pagination">
+            {% for p in range(1, total_pages + 1) %}
+                <a href="{{ url_for('index', page=p, q=query) }}"
+                   class="page-link {% if p == page %}active{% endif %}">{{ p }}</a>
+            {% endfor %}
+        </div>
+    {% endif %}
+{% else %}
+    <div class="empty-state">
+        <p>还没有文章，敬请期待。</p>
+    </div>
+{% endif %}
+</div>
+{% endblock %}

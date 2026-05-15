@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}注册账号 - 繁星绘流萤{% endblock %}
+{% block content %}
+<div class="admin-container">
+    <h2>注册账号</h2>
+    <form method="POST" class="admin-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>用户名</label>
+        <input type="text" name="username" class="input" required autofocus maxlength="30" value="{{ last_username if last_username else '' }}">
+
+        <label>密码</label>
+        <input type="password" name="password" class="input" required minlength="6">
+
+        <label>确认密码</label>
+        <input type="password" name="password2" class="input" required minlength="6">
+
+        <label>验证码</label>
+        <div class="captcha-row">
+            <input type="text" name="captcha" class="input captcha-input" required maxlength="4" autocomplete="off" placeholder="不区分大小写">
+            <img src="{{ url_for('captcha_image') }}" class="captcha-img" onclick="this.src='{{ url_for('captcha_image') }}?'+Date.now()" title="点击刷新验证码" alt="验证码">
+        </div>
+        <p class="captcha-hint">点击图片可刷新验证码</p>
+
+        <button type="submit" class="btn">注册</button>
+    </form>
+    <p class="form-footer">已有账号？<a href="{{ url_for('user_login') }}">立即登录</a></p>
+    <p class="back-link"><a href="{{ url_for('index') }}">← 返回首页</a></p>
+</div>
+{% endblock %}

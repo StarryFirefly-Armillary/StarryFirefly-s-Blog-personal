@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+{% block title %}媒体库 - 繁星绘流萤{% endblock %}
+{% block content %}
+<style>.container { max-width: 960px !important; }</style>
+<div class="admin-header">
+    <h2>媒体库</h2>
+    <div class="admin-actions">
+        <button type="button" class="btn" onclick="toggleUpload()">+ 上传媒体</button>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">← 文章管理</a>
+    </div>
+</div>
+
+<div id="upload-panel" style="display:none;background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:20px;">
+    <h4 style="margin-bottom:12px;">上传媒体文件</h4>
+    <div class="upload-row" style="flex-wrap:wrap;">
+        <div class="file-input-wrap" style="flex:1;min-width:200px;">
+            <input type="file" id="image-file" accept="image/*" onchange="updateFileName(this)">
+            <label for="image-file" class="file-input-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                选择图片
+            </label>
+            <span class="file-input-name" id="image-file-name">未选择文件</span>
+        </div>
+        <button type="button" id="upload-btn" class="btn" style="white-space:nowrap;">上传图片</button>
+    </div>
+    <div class="upload-row" style="flex-wrap:wrap;margin-top:8px;">
+        <div class="file-input-wrap" style="flex:1;min-width:200px;">
+            <input type="file" id="video-file" accept="video/*" onchange="updateFileName(this)">
+            <label for="video-file" class="file-input-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                选择视频
+            </label>
+            <span class="file-input-name" id="video-file-name">未选择文件</span>
+        </div>
+        <button type="button" id="video-upload-btn" class="btn" style="white-space:nowrap;">上传视频</button>
+    </div>
+        <button type="button" class="btn btn-secondary" onclick="toggleUpload()" style="white-space:nowrap;">取消</button>
+    </div>
+    <p id="upload-status" class="upload-status"></p>
+</div>
+
+{% if images %}
+    <div class="table-scroll">
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th style="width:68px;">预览</th>
+                <th style="max-width:180px;">文件名</th>
+                <th style="width:64px;">大小</th>
+                <th>关联文章</th>
+                <th style="width:180px;">操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for img in images %}
+                <tr>
+                    <td>
+                        {% if img.is_video %}
+                            {% if img.thumb_url != img.url %}
+                                <img src="{{ img.thumb_url }}" class="img-preview-thumb" loading="lazy">
+                            {% else %}
+                                <div class="img-preview-thumb video-preview-thumb">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none"/></svg>
+                                </div>
+                            {% endif %}
+                        {% else %}
+                            <a href="{{ img.url }}" target="_blank">
+                                <img src="{{ img.thumb_url }}" class="img-preview-thumb" loading="lazy">
+                            </a>
+                        {% endif %}
+                    </td>
+                    <td class="img-filename">
+                        <span class="filename-text">{{ img.filename }}{% if img.is_video %}<span class="video-label">视频</span>{% endif %}</span>
+                        <span class="filename-edit" style="display:none;">
+                            <input type="text" class="filename-input input" value="{{ img.filename }}" style="width:100%;margin-bottom:0;padding:2px 6px;font-size:0.82rem;">
+                            <span class="filename-actions" style="display:flex;gap:4px;margin-top:3px;">
+                                <button type="button" class="btn-small btn-primary rename-confirm">确定</button>
+                                <button type="button" class="btn-small rename-cancel">取消</button>
+                            </span>
+                        </span>
+                    </td>
+                    <td>{{ img.size }}</td>
+                    <td class="img-articles">
+                        {% if img.articles %}
+                            {% for a in img.articles %}
+                                <a href="{{ url_for('article', article_id=a.id) }}">{{ a.title }}</a>{% if not loop.last %}, {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            <span class="status-unused">未使用</span>
+                        {% endif %}
+                    </td>
+                    <td class="actions">
+                        <a href="{{ img.url }}" target="_blank" class="btn-small">查看</a>
+                        <button type="button" class="btn-small btn-rename" data-fname="{{ img.filename }}">重命名</button>
+                        {% if not img.used %}
+                            <form method="POST" action="{{ url_for('admin_delete_image', fname=img.filename) }}" style="display:inline" onsubmit="return confirm('确定删除此{{ '视频' if img.is_video else '图片' }}？')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <button type="submit" class="btn-small btn-danger">删除</button>
+                            </form>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+{% else %}
+    <div class="empty-state">
+        <p>暂无上传的媒体文件。</p>
+    </div>
+{% endif %}
+
+<script>
+function toggleUpload() {
+    var p = document.getElementById('upload-panel');
+    p.style.display = p.style.display === 'none' ? 'block' : 'none';
+    document.getElementById('upload-status').textContent = '';
+    document.getElementById('image-file').value = '';
+    updateFileName(document.getElementById('image-file'));
+    var vf = document.getElementById('video-file');
+    if (vf) { vf.value = ''; updateFileName(vf); }
+}
+
+document.getElementById('upload-btn').addEventListener('click', function() {
+    var fileInput = document.getElementById('image-file');
+    var file = fileInput.files[0];
+    var status = document.getElementById('upload-status');
+    if (!file) { status.textContent = '请先选择图片'; status.style.color = '#dc2626'; return; }
+    status.textContent = '上传中...';
+    status.style.color = '';
+    var formData = new FormData();
+    formData.append('file', file);
+    formData.append('csrf_token', '{{ csrf_token }}');
+    fetch('{{ url_for("admin_upload") }}', {
+        method: 'POST',
+        body: formData,
+        credentials: 'same-origin'
+    })
+    .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+    })
+    .then(function(data) {
+        if (data.ok) {
+            status.textContent = '上传成功！刷新页面...';
+            status.style.color = '#16a34a';
+            setTimeout(function() { location.reload(); }, 600);
+        } else {
+            status.textContent = '上传失败: ' + data.error;
+            status.style.color = '#dc2626';
+        }
+    })
+    .catch(function(e) {
+        status.textContent = e.message || '上传失败，请重试';
+        status.style.color = '#dc2626';
+    });
+});
+
+// Video upload from management page
+var videoUploadBtn = document.getElementById('video-upload-btn');
+if (videoUploadBtn) {
+videoUploadBtn.addEventListener('click', function() {
+    var fileInput = document.getElementById('video-file');
+    var file = fileInput.files[0];
+    var status = document.getElementById('upload-status');
+    if (!file) { status.textContent = '请先选择视频'; status.style.color = '#dc2626'; return; }
+    status.textContent = '上传中...';
+    status.style.color = '';
+    var formData = new FormData();
+    formData.append('file', file);
+    formData.append('csrf_token', '{{ csrf_token }}');
+    fetch('{{ url_for("admin_upload_video") }}', {
+        method: 'POST',
+        body: formData,
+        credentials: 'same-origin'
+    })
+    .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+    })
+    .then(function(data) {
+        if (data.ok) {
+            status.textContent = '上传成功！刷新页面...';
+            status.style.color = '#16a34a';
+            setTimeout(function() { location.reload(); }, 600);
+        } else {
+            status.textContent = '上传失败: ' + data.error;
+            status.style.color = '#dc2626';
+        }
+    })
+    .catch(function(e) {
+        status.textContent = e.message || '上传失败，请重试';
+        status.style.color = '#dc2626';
+    });
+});
+} // end if (videoUploadBtn)
+
+// Rename functionality
+document.querySelectorAll('.btn-rename').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var row = btn.closest('tr');
+        var textEl = row.querySelector('.filename-text');
+        var editEl = row.querySelector('.filename-edit');
+        var input = editEl.querySelector('.filename-input');
+        var confirmBtn = editEl.querySelector('.rename-confirm');
+        var cancelBtn = editEl.querySelector('.rename-cancel');
+        // Toggle to edit mode
+        textEl.style.display = 'none';
+        editEl.style.display = 'block';
+        input.focus();
+        input.select();
+        var fname = btn.dataset.fname;
+
+        function exitEdit() {
+            textEl.style.display = '';
+            editEl.style.display = 'none';
+        }
+
+        cancelBtn.onclick = exitEdit;
+
+        function doRename() {
+            var newName = input.value.trim();
+            var oldExt = fname.lastIndexOf('.') > -1 ? fname.slice(fname.lastIndexOf('.')) : '';
+            if (oldExt && newName.lastIndexOf('.') === -1) newName += oldExt;
+            if (!newName || newName === fname) { exitEdit(); return; }
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = '...';
+            var formData = new FormData();
+            formData.append('new_name', newName);
+            formData.append('csrf_token', '{{ csrf_token }}');
+            fetch('/admin/image/' + encodeURIComponent(fname) + '/rename', {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin'
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok) {
+                    location.reload();
+                } else {
+                    alert('重命名失败: ' + data.error);
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = '确定';
+                }
+            })
+            .catch(function(e) {
+                alert('请求失败: ' + e.message);
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = '确定';
+            });
+        }
+
+        confirmBtn.onclick = doRename;
+        input.onkeydown = function(e) {
+            if (e.key === 'Enter') doRename();
+            if (e.key === 'Escape') exitEdit();
+        };
+    });
+});
+
+// Client-side video thumbnail generation
+document.querySelectorAll('.video-preview-thumb').forEach(function(el) {
+    var row = el.closest('tr');
+    if (!row) return;
+    var filenameEl = row.querySelector('.filename-text');
+    if (!filenameEl) return;
+    var fname = filenameEl.textContent.replace('视频', '').trim();
+    var url = '/static/uploads/' + fname;
+    var video = document.createElement('video');
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+    video.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;';
+    document.body.appendChild(video);
+    video.src = url;
+    var done = false;
+    video.onloadedmetadata = function() {
+        if (!done && video.duration) {
+            video.currentTime = Math.min(1, video.duration * 0.1);
+        }
+    };
+    video.onseeked = function() {
+        if (done) return;
+        done = true;
+        try {
+            var canvas = document.createElement('canvas');
+            canvas.width = 360;
+            canvas.height = Math.floor(canvas.width / video.videoWidth * video.videoHeight) || 200;
+            var ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            var img = document.createElement('img');
+            img.src = canvas.toDataURL('image/jpeg', 0.7);
+            img.className = 'img-preview-thumb';
+            img.loading = 'lazy';
+            el.parentNode.replaceChild(img, el);
+        } catch(e) {}
+        document.body.removeChild(video);
+    };
+    video.onerror = function() { document.body.removeChild(video); };
+    setTimeout(function() { if (!done) { done = true; document.body.contains(video) && document.body.removeChild(video); } }, 8000);
+});
+</script>
+{% endblock %}

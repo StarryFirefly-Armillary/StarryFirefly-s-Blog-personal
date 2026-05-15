@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}用户管理 - 繁星绘流萤{% endblock %}
+{% block content %}
+<style>.container { max-width: 960px !important; }</style>
+<div class="admin-header">
+    <h2>用户管理</h2>
+    <div class="admin-actions">
+        <button type="button" class="btn" onclick="toggleNewUser()">+ 新建用户</button>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">← 返回后台</a>
+    </div>
+</div>
+
+<div id="new-user-form" style="display:none;background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:20px;">
+    <h3 style="margin-bottom:16px;">新建用户</h3>
+    <form method="POST" action="{{ url_for('admin_create_user') }}" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+            <div style="flex:1;min-width:140px;">
+                <label style="display:block;font-weight:600;margin-bottom:4px;font-size:0.9rem;">用户名</label>
+                <input type="text" name="username" class="input" required minlength="2" maxlength="30" style="margin-bottom:0;">
+            </div>
+            <div style="flex:1;min-width:140px;">
+                <label style="display:block;font-weight:600;margin-bottom:4px;font-size:0.9rem;">密码</label>
+                <input type="password" name="password" class="input" required minlength="6" style="margin-bottom:0;" autocomplete="new-password">
+            </div>
+            <div style="width:80px;">
+                <label style="display:block;font-weight:600;margin-bottom:4px;font-size:0.9rem;">ID (可选)</label>
+                <input type="number" name="user_id" class="input" min="1" placeholder="自动" style="margin-bottom:0;">
+            </div>
+            <div style="width:120px;">
+                <label style="display:block;font-weight:600;margin-bottom:4px;font-size:0.9rem;">角色</label>
+                <select name="role" class="input" style="margin-bottom:0;">
+                    <option value="user">普通用户</option>
+                    <option value="admin">管理员</option>
+                </select>
+            </div>
+            <button type="submit" class="btn" style="white-space:nowrap;">创建</button>
+            <button type="button" class="btn btn-secondary" onclick="toggleNewUser()">取消</button>
+        </div>
+    </form>
+</div>
+
+{% if users %}
+    <div class="table-scroll">
+    <table class="admin-table user-table" style="table-layout:auto;min-width:600px;">
+        <thead>
+            <tr>
+                <th style="width:40px;">ID</th>
+                <th style="width:48px;">头像</th>
+                <th>用户名</th>
+                <th style="width:72px;">角色</th>
+                <th style="width:210px;">操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in users %}
+                <tr>
+                    <td>{{ u.id }}</td>
+                    <td>
+                        {% if u.avatar %}
+                            <img src="{{ u.avatar }}" class="user-avatar-small">
+                        {% else %}
+                            <span class="user-avatar-txt">{{ u.username[0] | upper }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ u.username }}</td>
+                    <td>
+                        {% if u.role == 'admin' %}
+                            <span class="status-used">管理员</span>
+                        {% else %}
+                            普通用户
+                        {% endif %}
+                    </td>
+                    <td class="actions">
+                        <button type="button" class="btn-small" onclick="toggleEdit({{ u.id }})">编辑</button>
+                        <a href="{{ url_for('admin_change_user_password', user_id=u.id) }}" class="btn-small">改密</a>
+                        {% if u.id != session.user_id %}
+                            <form method="POST" action="{{ url_for('admin_delete_user', user_id=u.id) }}" style="display:inline" onsubmit="return confirm('确定删除用户「{{ u.username }}」及其所有评论？')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <button type="submit" class="btn-small btn-danger">删除</button>
+                            </form>
+                        {% else %}
+                            <span style="color:var(--text-secondary);font-size:0.8rem;">当前用户</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr id="edit-row-{{ u.id }}" style="display:none;">
+                    <td colspan="5" style="background:#fffbeb;padding:16px;">
+                        <form method="POST" action="{{ url_for('admin_edit_user', user_id=u.id) }}" enctype="multipart/form-data">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+                                <div style="flex:1;min-width:140px;">
+                                    <label style="display:block;font-weight:600;margin-bottom:4px;font-size:0.85rem;">用户名</label>
+                                    <input type="text" name="username" class="input" value="{{ u.username }}" required minlength="2" maxlength="30" style="margin-bottom:0;">
+                                </div>
+                                <div style="width:80px;">
+                                    <label style="display:block;font-weight:600;margin-bottom:4px;font-size:0.85rem;">ID</label>
+                                    <input type="number" name="new_user_id" class="input" value="{{ u.id }}" min="1" style="margin-bottom:0;">
+                                </div>
+                                <div style="width:120px;">
+                                    <label style="display:block;font-weight:600;margin-bottom:4px;font-size:0.85rem;">角色</label>
+                                    <select name="role" class="input" style="margin-bottom:0;">
+                                        <option value="user" {% if u.role == 'user' %}selected{% endif %}>普通用户</option>
+                                        <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>管理员</option>
+                                    </select>
+                                </div>
+                                <div style="flex:1;min-width:200px;">
+                                    <label style="display:block;font-weight:600;margin-bottom:4px;font-size:0.85rem;">头像</label>
+                                    <div class="file-input-wrap">
+                                        <input type="file" name="avatar" id="avatar-edit-{{ u.id }}" accept="image/*" onchange="updateFileName(this)">
+                                        <label for="avatar-edit-{{ u.id }}" class="file-input-btn" style="padding:6px 14px;font-size:0.82rem;">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                            选择图片
+                                        </label>
+                                        <span class="file-input-name" id="avatar-edit-{{ u.id }}-name" style="font-size:0.8rem;">未选择</span>
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn" style="white-space:nowrap;">保存</button>
+                                <button type="button" class="btn btn-secondary" onclick="toggleEdit({{ u.id }})">取消</button>
+                            </div>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+{% else %}
+    <div class="empty-state">
+        <p>暂无注册用户。</p>
+    </div>
+{% endif %}
+
+<script>
+function toggleNewUser() {
+    var f = document.getElementById('new-user-form');
+    f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+function toggleEdit(id) {
+    var r = document.getElementById('edit-row-' + id);
+    r.style.display = r.style.display === 'none' ? 'table-row' : 'none';
+}
+</script>
+{% endblock %}

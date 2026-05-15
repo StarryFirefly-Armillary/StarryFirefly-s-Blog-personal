@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}管理评论{% endblock %}
+{% block content %}
+<div class="admin-header">
+    <h2>评论管理</h2>
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">← 返回后台</a>
+</div>
+
+{% if comments %}
+    <div class="table-scroll">
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>文章</th>
+                <th>作者</th>
+                <th>内容</th>
+                <th>时间</th>
+                <th>层级</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in comments %}
+                <tr class="{% if c.pinned %}pinned-row{% endif %}">
+                    <td>{{ c.id }}</td>
+                    <td><a href="{{ url_for('article', article_id=c.article_id) }}">{{ c.article_title }}</a></td>
+                    <td>{{ c.author }}</td>
+                    <td>
+                        <span class="comment-content">{{ c.content[:60] }}{% if c.content|length > 60 %}...{% endif %}</span>
+                        <div class="edit-form" id="edit-form-{{ c.id }}" style="display:none;">
+                            <form method="POST" action="{{ url_for('edit_comment', comment_id=c.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="hidden" name="next" value="{{ url_for('admin_comments') }}">
+                                <textarea name="content" class="input" rows="2" required>{{ c.content }}</textarea>
+                                <div class="edit-form-row">
+                                    <input type="datetime-local" name="created_at" class="input input-sm" value="{{ c.created_at[:19].replace(' ', 'T') if c.created_at }}">
+                                    <button type="submit" class="btn-small btn-primary">保存</button>
+                                    <button type="button" class="btn-small" onclick="toggleEdit({{ c.id }})">取消</button>
+                                </div>
+                            </form>
+                        </div>
+                    </td>
+                    <td>{{ c.created_at[:16] if c.created_at }}</td>
+                    <td>
+                        {% if c.parent_id %}
+                            <span style="font-size:0.8rem;color:var(--text-secondary);">回复 #{{ c.parent_id }}</span>
+                        {% else %}
+                            <span style="font-size:0.8rem;color:var(--text-secondary);">顶层</span>
+                        {% endif %}
+                    </td>
+                    <td class="actions">
+                        <form method="POST" action="{{ url_for('pin_comment', comment_id=c.id) }}" style="display:inline;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <button type="submit" class="btn-small {% if c.pinned %}pin-on{% else %}pin-off{% endif %}">
+                                {% if c.pinned %}取消置顶{% else %}置顶{% endif %}
+                            </button>
+                        </form>
+                        <button type="button" class="btn-small btn-edit-comment" onclick="toggleEdit({{ c.id }})">编辑</button>
+                        <form method="POST" action="{{ url_for('admin_delete_comment', comment_id=c.id) }}"
+                              style="display:inline;" onsubmit="return confirm('确定删除？')">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <button type="submit" class="btn-small btn-danger">删除</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+{% else %}
+    <p class="empty-state">暂无评论。</p>
+{% endif %}
+
+<script>
+function toggleEdit(id) { var f = document.getElementById('edit-form-' + id); f.style.display = f.style.display === 'none' ? 'block' : 'none'; }
+</script>
+{% endblock %}
