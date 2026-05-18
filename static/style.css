@@ -935,7 +935,7 @@ main {
 .attachment-card a:hover {
     border-color: #93c5fd;
     background: #eff6ff;
-    color: #fff;
+    color: #1e293b;
     box-shadow: 0 6px 16px rgba(59,130,246,0.12);
     transform: translateY(-2px);
 }
