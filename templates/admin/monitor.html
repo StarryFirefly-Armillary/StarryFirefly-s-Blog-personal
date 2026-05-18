@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}服务器监控 - 繁星绘流萤{% endblock %}
+{% block content %}
+<style>
+.monitor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 20px; }
+.monitor-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+.monitor-card h3 { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+.monitor-value { font-size: 2rem; font-weight: 700; }
+.monitor-bar-wrap { background: #e2e8f0; border-radius: 6px; height: 10px; margin-top: 10px; overflow: hidden; }
+.monitor-bar-fill { height: 100%; border-radius: 6px; transition: width 0.5s ease; }
+.monitor-bar-fill.green { background: linear-gradient(90deg, #22c55e, #16a34a); }
+.monitor-bar-fill.yellow { background: linear-gradient(90deg, #f59e0b, #d97706); }
+.monitor-bar-fill.red { background: linear-gradient(90deg, #ef4444, #dc2626); }
+.monitor-bar-fill.blue { background: linear-gradient(90deg, #3b82f6, #2563eb); }
+.monitor-detail { display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--text-secondary); margin-top: 6px; }
+.monitor-row { display: flex; gap: 24px; flex-wrap: wrap; }
+.monitor-stat { flex: 1; min-width: 80px; }
+.monitor-stat .label { font-size: 0.75rem; color: var(--text-secondary); }
+.monitor-stat .val { font-size: 1.1rem; font-weight: 600; }
+.error-badge { color: #ef4444; font-size: 0.8rem; }
+.refresh-info { font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 16px; }
+.refresh-info span { color: #22c55e; font-weight: 600; }
+@media (prefers-color-scheme: dark) {
+    .monitor-bar-wrap { background: #334155; }
+}
+</style>
+
+<div class="admin-header">
+    <h2>服务器监控</h2>
+    <div class="admin-actions">
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">← 返回后台</a>
+    </div>
+</div>
+
+<p class="refresh-info">自动刷新 <span id="countdown">3</span> 秒 · <span id="last-update">--</span></p>
+
+<div class="monitor-grid">
+    <div class="monitor-card">
+        <h3>CPU 使用率</h3>
+        <div class="monitor-value" id="cpu-value">--%</div>
+        <div class="monitor-bar-wrap"><div class="monitor-bar-fill blue" id="cpu-bar" style="width:0%"></div></div>
+    </div>
+
+    <div class="monitor-card">
+        <h3>内存</h3>
+        <div class="monitor-value" id="mem-value">-- GB</div>
+        <div class="monitor-bar-wrap"><div class="monitor-bar-fill green" id="mem-bar" style="width:0%"></div></div>
+        <div class="monitor-detail">
+            <span>已用 <strong id="mem-used">--</strong> GB</span>
+            <span>可用 <strong id="mem-avail">--</strong> GB</span>
+            <span>总计 <strong id="mem-total">--</strong> GB</span>
+        </div>
+    </div>
+
+    <div class="monitor-card">
+        <h3>磁盘</h3>
+        <div class="monitor-value" id="disk-value">-- GB</div>
+        <div class="monitor-bar-wrap"><div class="monitor-bar-fill yellow" id="disk-bar" style="width:0%"></div></div>
+        <div class="monitor-detail">
+            <span>已用 <strong id="disk-used">--</strong> GB</span>
+            <span>可用 <strong id="disk-free">--</strong> GB</span>
+            <span>总计 <strong id="disk-total">--</strong> GB</span>
+        </div>
+    </div>
+
+    <div class="monitor-card">
+        <h3>系统负载（平均活跃进程数）</h3>
+        <div class="monitor-row">
+            <div class="monitor-stat"><div class="label">1分钟</div><div class="val" id="load-1">--</div></div>
+            <div class="monitor-stat"><div class="label">5分钟</div><div class="val" id="load-5">--</div></div>
+            <div class="monitor-stat"><div class="label">15分钟</div><div class="val" id="load-15">--</div></div>
+        </div>
+        <p style="margin-top:10px;font-size:0.78rem;color:var(--text-secondary);line-height:1.5;">
+            CPU 核心数：<strong id="cpu-cores">--</strong> · 负载低于核心数为正常，持续超过核心数表示系统繁忙
+        </p>
+    </div>
+
+    <div class="monitor-card">
+        <h3>运行时间</h3>
+        <div class="monitor-value" id="uptime" style="font-size:1.5rem;">--</div>
+    </div>
+
+    <div class="monitor-card">
+        <h3>网络流量</h3>
+        <div class="monitor-row">
+            <div class="monitor-stat"><div class="label">下载</div><div class="val" id="net-rx">-- MB</div></div>
+            <div class="monitor-stat"><div class="label">上传</div><div class="val" id="net-tx">-- MB</div></div>
+        </div>
+    </div>
+</div>
+
+<p class="error-badge" id="error-msg" style="display:none;"></p>
+
+<script>
+var countdown = 3;
+var timer = null;
+
+function formatUptime(sec) {
+    if (!sec && sec !== 0) return '--';
+    var d = Math.floor(sec / 86400);
+    var h = Math.floor((sec % 86400) / 3600);
+    var m = Math.floor((sec % 3600) / 60);
+    var parts = [];
+    if (d > 0) parts.push(d + ' 天');
+    if (h > 0) parts.push(h + ' 小时');
+    parts.push(m + ' 分钟');
+    return parts.join(' ');
+}
+
+function barClass(pct) {
+    if (pct < 60) return 'green';
+    if (pct < 85) return 'yellow';
+    return 'red';
+}
+
+function refresh() {
+    fetch('{{ url_for("admin_monitor_api") }}')
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.error) {
+                document.getElementById('error-msg').textContent = d.error;
+                document.getElementById('error-msg').style.display = 'block';
+                return;
+            }
+            document.getElementById('error-msg').style.display = 'none';
+
+            // CPU
+            var cpu = d.cpu_percent;
+            document.getElementById('cpu-value').textContent = (cpu !== null ? cpu + '%' : '--');
+            var cpuBar = document.getElementById('cpu-bar');
+            cpuBar.style.width = (cpu || 0) + '%';
+            cpuBar.className = 'monitor-bar-fill ' + barClass(cpu || 0);
+
+            // Memory
+            var memUsed = d.mem_used || 0;
+            var memTotal = d.mem_total || 1;
+            var memPct = Math.round(memUsed / memTotal * 100);
+            document.getElementById('mem-value').textContent = (memUsed / 1024).toFixed(1) + ' / ' + (memTotal / 1024).toFixed(1) + ' GB';
+            document.getElementById('mem-used').textContent = (memUsed / 1024).toFixed(1);
+            document.getElementById('mem-avail').textContent = (d.mem_available / 1024).toFixed(1);
+            document.getElementById('mem-total').textContent = (memTotal / 1024).toFixed(1);
+            var memBar = document.getElementById('mem-bar');
+            memBar.style.width = memPct + '%';
+            memBar.className = 'monitor-bar-fill ' + barClass(memPct);
+
+            // Disk
+            var diskTotal = d.disk_total || 1;
+            var diskPct = Math.round(d.disk_used / diskTotal * 100);
+            document.getElementById('disk-value').textContent = d.disk_used.toFixed(1) + ' / ' + diskTotal.toFixed(1) + ' GB';
+            document.getElementById('disk-used').textContent = d.disk_used.toFixed(1);
+            document.getElementById('disk-free').textContent = d.disk_free.toFixed(1);
+            document.getElementById('disk-total').textContent = diskTotal.toFixed(1);
+            var diskBar = document.getElementById('disk-bar');
+            diskBar.style.width = diskPct + '%';
+            diskBar.className = 'monitor-bar-fill ' + barClass(diskPct);
+
+            // Load
+            document.getElementById('load-1').textContent = d.load_1 != null ? d.load_1.toFixed(2) : '--';
+            document.getElementById('load-5').textContent = d.load_5 != null ? d.load_5.toFixed(2) : '--';
+            document.getElementById('load-15').textContent = d.load_15 != null ? d.load_15.toFixed(2) : '--';
+            document.getElementById('cpu-cores').textContent = d.cpu_cores || '--';
+
+            // Uptime
+            document.getElementById('uptime').textContent = formatUptime(d.uptime_seconds);
+
+            // Network
+            document.getElementById('net-rx').textContent = d.net_rx_mb != null ? d.net_rx_mb + ' MB' : '--';
+            document.getElementById('net-tx').textContent = d.net_tx_mb != null ? d.net_tx_mb + ' MB' : '--';
+
+            // Timestamp
+            var now = new Date();
+            document.getElementById('last-update').textContent = now.toLocaleTimeString('zh-CN');
+
+            countdown = 3;
+        })
+        .catch(function(e) {
+            document.getElementById('error-msg').textContent = '请求失败: ' + e.message;
+            document.getElementById('error-msg').style.display = 'block';
+        });
+}
+
+refresh();
+timer = setInterval(function() {
+    countdown--;
+    document.getElementById('countdown').textContent = countdown;
+    if (countdown <= 0) { refresh(); countdown = 3; }
+}, 1000);
+</script>
+{% endblock %}

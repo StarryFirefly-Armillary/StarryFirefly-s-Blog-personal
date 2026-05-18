@@ -645,6 +645,87 @@ def admin_dashboard():
                            page=page, total_pages=total_pages)
 
 
+def _get_server_stats():
+    """Collect server resource usage. Returns dict for JSON response."""
+    stats = {}
+    try:
+        # --- CPU usage (2 samples with 0.3s gap) ---
+        def _read_cpu():
+            with open('/proc/stat') as f:
+                for line in f:
+                    if line.startswith('cpu '):
+                        parts = line.split()
+                        return sum(int(x) for x in parts[1:]), int(parts[4])
+        if os.path.exists('/proc/stat'):
+            t1, i1 = _read_cpu()
+            _time.sleep(0.3)
+            t2, i2 = _read_cpu()
+            total_delta = t2 - t1
+            idle_delta = i2 - i1
+            stats['cpu_percent'] = round((1 - idle_delta / total_delta) * 100, 1) if total_delta > 0 else 0
+        else:
+            stats['cpu_percent'] = None
+
+        # --- Memory ---
+        if os.path.exists('/proc/meminfo'):
+            mem = {}
+            with open('/proc/meminfo') as f:
+                for line in f:
+                    if line.startswith(('MemTotal', 'MemAvailable', 'MemFree', 'Buffers', 'Cached')):
+                        k, v = line.split(':')
+                        mem[k.strip()] = int(v.strip().split()[0])
+            stats['mem_total'] = mem.get('MemTotal', 0) // 1024  # MB
+            stats['mem_available'] = mem.get('MemAvailable', 0) // 1024
+            stats['mem_used'] = stats['mem_total'] - stats['mem_available']
+
+        # --- Disk ---
+        st = os.statvfs('/')
+        stats['disk_total'] = round(st.f_frsize * st.f_blocks / (1024 ** 3), 1)  # GB
+        stats['disk_used'] = round(st.f_frsize * (st.f_blocks - st.f_bfree) / (1024 ** 3), 1)
+        stats['disk_free'] = round(st.f_frsize * st.f_bavail / (1024 ** 3), 1)
+
+        # --- Uptime ---
+        if os.path.exists('/proc/uptime'):
+            with open('/proc/uptime') as f:
+                stats['uptime_seconds'] = int(float(f.read().split()[0]))
+
+        # --- Load Average + CPU cores ---
+        if os.path.exists('/proc/loadavg'):
+            with open('/proc/loadavg') as f:
+                parts = f.read().split()
+                stats['load_1'] = float(parts[0])
+                stats['load_5'] = float(parts[1])
+                stats['load_15'] = float(parts[2])
+        stats['cpu_cores'] = os.cpu_count() or 1
+
+        # --- Network I/O ---
+        if os.path.exists('/proc/net/dev'):
+            with open('/proc/net/dev') as f:
+                rx = tx = 0
+                for line in f:
+                    if ':' in line and 'lo:' not in line:
+                        parts = line.split(':')[1].split()
+                        rx += int(parts[0])
+                        tx += int(parts[8])
+                stats['net_rx_mb'] = round(rx / (1024 ** 2), 1)
+                stats['net_tx_mb'] = round(tx / (1024 ** 2), 1)
+    except Exception as e:
+        stats['error'] = str(e)
+    return stats
+
+
+@app.route('/admin/monitor')
+@admin_required
+def admin_monitor():
+    return render_template('admin/monitor.html')
+
+
+@app.route('/admin/monitor/api')
+@admin_required
+def admin_monitor_api():
+    return jsonify(_get_server_stats())
+
+
 @app.route('/admin/upload', methods=['POST'])
 @admin_required
 @csrf_required
